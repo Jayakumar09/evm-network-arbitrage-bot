@@ -1,9 +1,12 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from 'react'
+
+import { getConnectedWalletAddress } from '../services/blockchain'
 
 import type {
   ArbitrageOpportunity,
@@ -17,6 +20,12 @@ interface ArbitrageContextValue {
   ) => void
 
   clearOpportunity: () => void
+
+  walletAddress: string | null
+
+  walletConnected: boolean
+
+  refreshWallet: () => Promise<void>
 }
 
 const ArbitrageContext =
@@ -34,9 +43,42 @@ export function ArbitrageProvider({
   const [opportunity, setOpportunity] =
     useState<ArbitrageOpportunity | null>(null)
 
+  const [walletAddress, setWalletAddress] =
+    useState<string | null>(null)
+
+  const [walletConnected, setWalletConnected] =
+    useState(false)
+
   const clearOpportunity = () => {
     setOpportunity(null)
   }
+
+  const refreshWallet = async () => {
+    const address =
+      await getConnectedWalletAddress()
+
+    setWalletAddress(address)
+    setWalletConnected(address !== null)
+  }
+
+  useEffect(() => {
+    const handleWalletDisconnected = () => {
+      setWalletAddress(null)
+      setWalletConnected(false)
+    }
+
+    window.addEventListener(
+      'walletDisconnected',
+      handleWalletDisconnected,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'walletDisconnected',
+        handleWalletDisconnected,
+      )
+    }
+  }, [])
 
   return (
     <ArbitrageContext.Provider
@@ -44,6 +86,9 @@ export function ArbitrageProvider({
         opportunity,
         setOpportunity,
         clearOpportunity,
+        walletAddress,
+        walletConnected,
+        refreshWallet,
       }}
     >
       {children}

@@ -7,9 +7,20 @@
 import { useEffect, useState } from 'react'
 
 import {
+  EXECUTOR_CONTRACT_ADDRESS,
+  NETWORK_NAME,
+} from '../config/contracts'
+
+import {
+  getConnectedWalletAddress,
+  getExecutorETHBalance,
+  getExecutorOwner,
+  getExecutorPaused,
   getExecutorUSDCBalance,
   getExecutorWETHBalance,
-  getProvider,
+  getWalletETHBalance,
+  getWalletUSDCBalance,
+  getWalletWETHBalance,
 } from '../services/blockchain'
 
 // ======================================================
@@ -18,83 +29,284 @@ import {
 
 function ContractPage() {
   // ======================================================
-  // State
+  // Wallet State
   // ======================================================
 
-  const [usdcBalance, setUsdcBalance] = useState('0.00')
-  const [wethBalance, setWethBalance] = useState('0.000000')
+  const [connectedWallet, setConnectedWallet] =
+    useState<string | null>(null)
 
-  const [isConnected, setIsConnected] = useState(false)
-  const [isSepolia, setIsSepolia] = useState(false)
-  const [loadingBalances, setLoadingBalances] = useState(true)
+  const [contractOwner, setContractOwner] =
+    useState<string>('')
+
+  const [isOwner, setIsOwner] =
+    useState(false)
+
+  const [isPaused, setIsPaused] =
+    useState(false)
+
+  const [isConnected, setIsConnected] =
+    useState(false)
+
+  const [loading, setLoading] =
+    useState(true)
+
+
+  // ======================================================
+  // Contract Balances
+  // ======================================================
+
+  const [ethBalance, setEthBalance] =
+    useState('0.000000')
+
+  const [usdcBalance, setUsdcBalance] =
+    useState('0.00')
+
+  const [wethBalance, setWethBalance] =
+    useState('0.000000')
+
+
+  // ======================================================
+  // Wallet Balances
+  // ======================================================
+
+
+  const [walletEthBalance, setWalletEthBalance] =
+    useState<string>('0.000000')
+
+  const [walletUsdcBalance, setWalletUsdcBalance] =
+    useState<string>('0.00')
+
+  const [walletWethBalance, setWalletWethBalance] =
+    useState<string>('0.000000')
+
+  // ======================================================
+  // Format Address
+  // ======================================================
+
+  function formatAddress(
+    address: string | null,
+  ): string {
+    if (!address) {
+      return 'Not connected'
+    }
+
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }
 
   // ======================================================
   // Load Contract Data
   // ======================================================
 
   useEffect(() => {
-    async function loadContractData() {
-      try {
-        setLoadingBalances(true)
+  let mounted = true
 
-        // --------------------------------------------------
-        // Get browser provider
-        // --------------------------------------------------
+  async function loadContractData() {
+    try {
+      setLoading(true)
 
-        const provider = await getProvider()
+      // --------------------------------------------------
+      // Wallet
+      // --------------------------------------------------
 
-        // --------------------------------------------------
-        // Check blockchain network
-        // --------------------------------------------------
+      const wallet =
+        await getConnectedWalletAddress()
 
-        const network = await provider.getNetwork()
+      if (!mounted) return
 
-        const sepoliaConnected =
-          network.chainId === 11155111n
+      setConnectedWallet(wallet)
+      setIsConnected(wallet !== null)
 
-        setIsSepolia(sepoliaConnected)
-        setIsConnected(true)
+      // --------------------------------------------------
+      // Contract owner
+      // --------------------------------------------------
 
-        // --------------------------------------------------
-        // Get Executor Contract Balances
-        // --------------------------------------------------
+      const owner =
+        await getExecutorOwner()
 
-        if (sepoliaConnected) {
-          const [usdc, weth] = await Promise.all([
-            getExecutorUSDCBalance(),
-            getExecutorWETHBalance(),
-          ])
+      if (!mounted) return
 
-          // ------------------------------------------------
-          // Format balances for display
-          // ------------------------------------------------
+      setContractOwner(owner)
 
-          setUsdcBalance(
-            Number(usdc).toFixed(2),
-          )
+      // --------------------------------------------------
+      // Owner verification
+      // --------------------------------------------------
 
-          setWethBalance(
-            Number(weth).toFixed(6),
-          )
-        }
-      } catch (error) {
-        console.error(
-          'Failed to load contract data:',
-          error,
+      if (wallet) {
+        setIsOwner(
+          wallet.toLowerCase() ===
+          owner.toLowerCase(),
         )
+      } else {
+        setIsOwner(false)
+      }
 
-        setIsConnected(false)
-        setIsSepolia(false)
+      // --------------------------------------------------
+      // Paused status
+      // --------------------------------------------------
 
+      const paused =
+        await getExecutorPaused()
+
+      if (!mounted) return
+
+      setIsPaused(paused)
+
+      // --------------------------------------------------
+      // Contract + Wallet balances
+      // --------------------------------------------------
+
+      if (!wallet) {
+        setEthBalance('0.000000')
         setUsdcBalance('0.00')
         setWethBalance('0.000000')
-      } finally {
-        setLoadingBalances(false)
+
+        setWalletEthBalance('0.000000')
+        setWalletUsdcBalance('0.00')
+        setWalletWethBalance('0.000000')
+
+        return
+      }
+
+      const [
+        eth,
+        usdc,
+        weth,
+        walletEth,
+        walletUsdc,
+        walletWeth,
+      ] = await Promise.all([
+        // Executor contract
+        getExecutorETHBalance(),
+        getExecutorUSDCBalance(),
+        getExecutorWETHBalance(),
+
+        // Connected wallet
+        getWalletETHBalance(),
+        getWalletUSDCBalance(),
+        getWalletWETHBalance(),
+      ])
+
+      if (!mounted) return
+
+      // --------------------------------------------------
+      // Executor Contract Balances
+      // --------------------------------------------------
+
+      setEthBalance(
+        Number(eth).toFixed(6),
+      )
+
+      setUsdcBalance(
+        Number(usdc).toFixed(2),
+      )
+
+      setWethBalance(
+        Number(weth).toFixed(6),
+      )
+
+      // --------------------------------------------------
+      // Connected Wallet Balances
+      // --------------------------------------------------
+
+      setWalletEthBalance(
+        Number(walletEth).toFixed(6),
+      )
+
+      setWalletUsdcBalance(
+        Number(walletUsdc).toFixed(2),
+      )
+
+      setWalletWethBalance(
+        Number(walletWeth).toFixed(6),
+      )
+
+    } catch (error) {
+      console.error(
+        'Failed to load contract data:',
+        error,
+      )
+
+      if (!mounted) return
+
+      setConnectedWallet(null)
+      setIsConnected(false)
+      setIsOwner(false)
+
+      setWalletEthBalance('0.000000')
+      setWalletUsdcBalance('0.00')
+      setWalletWethBalance('0.000000')
+
+    } finally {
+      if (mounted) {
+        setLoading(false)
       }
     }
+  }
+
+  // --------------------------------------------------
+  // Initial Load
+  // --------------------------------------------------
+
+  loadContractData()
+
+  // --------------------------------------------------
+  // MetaMask Event Handlers
+  // --------------------------------------------------
+
+  const ethereum = window.ethereum
+
+  if (!ethereum) {
+    return () => {
+      mounted = false
+    }
+  }
+
+  const handleAccountsChanged = () => {
+    console.log(
+      'MetaMask account changed. Reloading contract data...',
+    )
 
     loadContractData()
-  }, [])
+  }
+
+  const handleChainChanged = () => {
+    console.log(
+      'MetaMask network changed. Reloading contract data...',
+    )
+
+    loadContractData()
+  }
+
+  ethereum.on(
+    'accountsChanged',
+    handleAccountsChanged,
+  )
+
+  ethereum.on(
+    'chainChanged',
+    handleChainChanged,
+  )
+
+  // --------------------------------------------------
+  // Cleanup
+  // --------------------------------------------------
+
+  return () => {
+    mounted = false
+
+    ethereum.removeListener(
+      'accountsChanged',
+      handleAccountsChanged,
+    )
+
+    ethereum.removeListener(
+      'chainChanged',
+      handleChainChanged,
+    )
+  }
+
+}, [])
+
 
   // ======================================================
   // Render
@@ -162,7 +374,7 @@ function ContractPage() {
             </p>
 
             <p className="mt-2 break-all font-mono text-sm text-white">
-              0x4C03fBb92593331910249D628751B6F3aafdf25e
+              {EXECUTOR_CONTRACT_ADDRESS}
             </p>
 
           </div>
@@ -177,7 +389,7 @@ function ContractPage() {
             </p>
 
             <p className="mt-2 text-sm font-semibold text-white">
-              Ethereum Sepolia
+              {NETWORK_NAME}
             </p>
 
           </div>
@@ -191,8 +403,18 @@ function ContractPage() {
               Contract Status
             </p>
 
-            <p className="mt-2 text-sm font-semibold text-emerald-400">
-              Active
+            <p
+              className={`mt-2 text-sm font-semibold ${
+                isPaused
+                  ? 'text-red-400'
+                  : 'text-emerald-400'
+              }`}
+            >
+              {loading
+                ? 'Checking...'
+                : isPaused
+                  ? 'Paused'
+                  : 'Active'}
             </p>
 
           </div>
@@ -218,6 +440,147 @@ function ContractPage() {
 
 
       {/* ==================================================
+          Wallet & Ownership
+          ================================================== */}
+
+      <section className="mb-6 rounded-xl border border-slate-800 bg-slate-950/60 p-6">
+
+        <h2 className="mb-5 text-lg font-semibold text-white">
+          Wallet & Ownership
+        </h2>
+
+        <div className="space-y-4">
+
+          {/* Connected Wallet */}
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
+
+            <span className="text-sm text-white">
+              Connected Wallet
+            </span>
+
+            <span className="break-all font-mono text-sm font-semibold text-slate-300">
+              {loading
+                ? 'Checking...'
+                : formatAddress(connectedWallet)}
+            </span>
+
+          </div>
+
+
+          {/* Contract Owner */}
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
+
+            <span className="text-sm text-white">
+              Contract Owner
+            </span>
+
+            <span className="break-all font-mono text-sm font-semibold text-slate-300">
+              {loading
+                ? 'Checking...'
+                : formatAddress(contractOwner)}
+            </span>
+
+          </div>
+
+
+          {/* Authorization */}
+
+          <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
+
+            <span className="text-sm text-white">
+              Owner Authorization
+            </span>
+
+            <span
+              className={`text-sm font-semibold ${
+                isOwner
+                  ? 'text-emerald-400'
+                  : 'text-red-400'
+              }`}
+            >
+              {loading
+                ? 'CHECKING...'
+                : isOwner
+                  ? 'OWNER'
+                  : 'NOT OWNER'}
+            </span>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      {/* ==================================================
+          Wallet Balances
+          ================================================== */}
+
+      <section className="mb-6 rounded-xl border border-emerald-500/20 bg-slate-950/60 p-6">
+
+        <h2 className="mb-5 text-lg font-semibold text-white">
+          Wallet Balances
+        </h2>
+
+        <div className="grid gap-4 md:grid-cols-3">
+
+          {/* ETH */}
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Wallet ETH
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              {loading
+                ? 'Loading...'
+                : `${walletEthBalance} ETH`}
+            </p>
+
+          </div>
+
+
+          {/* USDC */}
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Wallet USDC
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              {loading
+                ? 'Loading...'
+                : `${walletUsdcBalance} USDC`}
+            </p>
+
+          </div>
+
+
+          {/* WETH */}
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Wallet WETH
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              {loading
+                ? 'Loading...'
+                : `${walletWethBalance} WETH`}
+            </p>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* ==================================================
           Contract Balances
           ================================================== */}
 
@@ -227,9 +590,26 @@ function ContractPage() {
           Contract Balances
         </h2>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
 
-          {/* USDC Balance */}
+          {/* ETH */}
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              ETH Balance
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              {loading
+                ? 'Loading...'
+                : `${ethBalance} ETH`}
+            </p>
+
+          </div>
+
+
+          {/* USDC */}
 
           <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
 
@@ -238,17 +618,15 @@ function ContractPage() {
             </p>
 
             <p className="mt-2 text-2xl font-semibold text-white">
-
-              {loadingBalances
+              {loading
                 ? 'Loading...'
                 : `${usdcBalance} USDC`}
-
             </p>
 
           </div>
 
 
-          {/* WETH Balance */}
+          {/* WETH */}
 
           <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
 
@@ -257,11 +635,9 @@ function ContractPage() {
             </p>
 
             <p className="mt-2 text-2xl font-semibold text-white">
-
-              {loadingBalances
+              {loading
                 ? 'Loading...'
                 : `${wethBalance} WETH`}
-
             </p>
 
           </div>
@@ -291,8 +667,18 @@ function ContractPage() {
               Contract Paused
             </span>
 
-            <span className="text-sm font-semibold text-emerald-400">
-              NO
+            <span
+              className={`text-sm font-semibold ${
+                isPaused
+                  ? 'text-red-400'
+                  : 'text-emerald-400'
+              }`}
+            >
+              {loading
+                ? 'CHECKING...'
+                : isPaused
+                  ? 'YES'
+                  : 'NO'}
             </span>
 
           </div>
@@ -323,14 +709,14 @@ function ContractPage() {
 
             <span
               className={`text-sm font-semibold ${
-                isConnected && isSepolia
+                isConnected
                   ? 'text-emerald-400'
                   : 'text-red-400'
               }`}
             >
-              {loadingBalances
+              {loading
                 ? 'CHECKING...'
-                : isConnected && isSepolia
+                : isConnected
                   ? 'CONNECTED'
                   : 'NOT CONNECTED'}
             </span>
