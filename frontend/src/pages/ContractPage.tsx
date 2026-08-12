@@ -12,6 +12,8 @@ import {
 } from '../config/contracts'
 
 import {
+  emergencyPauseExecutor,
+  emergencyUnpauseExecutor,
   getConnectedWalletAddress,
   getExecutorETHBalance,
   getExecutorOwner,
@@ -21,6 +23,7 @@ import {
   getWalletETHBalance,
   getWalletUSDCBalance,
   getWalletWETHBalance,
+  transferExecutorOwnership,
 } from '../services/blockchain'
 
 // ======================================================
@@ -49,6 +52,23 @@ function ContractPage() {
 
   const [loading, setLoading] =
     useState(true)
+
+
+  // ======================================================
+  // Owner Controls
+  // ======================================================
+
+  const [ownerActionLoading, setOwnerActionLoading] =
+    useState(false)
+
+  const [ownerActionMessage, setOwnerActionMessage] =
+    useState('')
+
+  const [ownerActionError, setOwnerActionError] =
+    useState('')
+
+  const [newOwnerAddress, setNewOwnerAddress] =
+    useState('')
 
 
   // ======================================================
@@ -309,6 +329,173 @@ function ContractPage() {
 
 
   // ======================================================
+// Pause Executor
+// ======================================================
+
+async function handlePauseExecutor() {
+  if (!isOwner) {
+    return
+  }
+
+  try {
+    setOwnerActionLoading(true)
+    setOwnerActionMessage('')
+    setOwnerActionError('')
+
+    const transactionHash =
+      await emergencyPauseExecutor()
+
+    // --------------------------------------------------
+    // Update frontend state immediately
+    // Transaction has already been confirmed
+    // --------------------------------------------------
+
+    setIsPaused(true)
+
+    setOwnerActionMessage(
+      `Contract paused successfully. Transaction: ${transactionHash}`,
+    )
+  } catch (error) {
+    console.error(
+      'Failed to pause executor:',
+      error,
+    )
+
+    setOwnerActionError(
+      error instanceof Error
+        ? error.message
+        : 'Failed to pause contract.',
+    )
+  } finally {
+    setOwnerActionLoading(false)
+  }
+}
+
+
+// ======================================================
+// Unpause Executor
+// ======================================================
+
+async function handleUnpauseExecutor() {
+  if (!isOwner) {
+    return
+  }
+
+  try {
+    setOwnerActionLoading(true)
+    setOwnerActionMessage('')
+    setOwnerActionError('')
+
+    const transactionHash =
+      await emergencyUnpauseExecutor()
+
+    // --------------------------------------------------
+    // Update frontend state immediately
+    // Transaction has already been confirmed
+    // --------------------------------------------------
+
+    setIsPaused(false)
+
+    setOwnerActionMessage(
+      `Contract unpaused successfully. Transaction: ${transactionHash}`,
+    )
+  } catch (error) {
+    console.error(
+      'Failed to unpause executor:',
+      error,
+    )
+
+    setOwnerActionError(
+      error instanceof Error
+        ? error.message
+        : 'Failed to unpause contract.',
+    )
+  } finally {
+    setOwnerActionLoading(false)
+  }
+}
+
+
+  // ======================================================
+  // Transfer Ownership
+  // ======================================================
+
+  async function handleTransferOwnership() {
+    if (!isOwner) {
+      return
+    }
+
+    if (!newOwnerAddress.trim()) {
+      setOwnerActionError(
+        'Enter a new owner address.',
+      )
+      return
+    }
+
+    if (
+      !/^0x[a-fA-F0-9]{40}$/.test(
+        newOwnerAddress.trim(),
+      )
+    ) {
+      setOwnerActionError(
+        'Enter a valid Ethereum address.',
+      )
+      return
+    }
+
+    try {
+      setOwnerActionLoading(true)
+      setOwnerActionMessage('')
+      setOwnerActionError('')
+
+      const transactionHash =
+        await transferExecutorOwnership(
+          newOwnerAddress.trim(),
+        )
+
+      setOwnerActionMessage(
+        `Ownership transferred successfully. Transaction: ${transactionHash}`,
+      )
+
+      const owner =
+        await getExecutorOwner()
+
+      setContractOwner(owner)
+
+      const wallet =
+        await getConnectedWalletAddress()
+
+      setConnectedWallet(wallet)
+      setIsConnected(wallet !== null)
+
+      if (wallet) {
+        setIsOwner(
+          wallet.toLowerCase() ===
+          owner.toLowerCase(),
+        )
+      } else {
+        setIsOwner(false)
+      }
+
+      setNewOwnerAddress('')
+    } catch (error) {
+      console.error(
+        'Failed to transfer ownership:',
+        error,
+      )
+
+      setOwnerActionError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to transfer ownership.',
+      )
+    } finally {
+      setOwnerActionLoading(false)
+    }
+  }
+
+
+  // ======================================================
   // Render
   // ======================================================
 
@@ -340,11 +527,27 @@ function ContractPage() {
 
           </div>
 
-          <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400">
+          <span
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
+              isPaused
+                ? 'border border-red-500/20 bg-red-500/10 text-red-400'
+                : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+            }`}
+          >
 
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isPaused
+                  ? 'bg-red-400'
+                  : 'bg-emerald-400'
+              }`}
+            />
 
-            ACTIVE
+            {loading
+              ? 'CHECKING...'
+              : isPaused
+                ? 'PAUSED'
+                : 'ACTIVE'}
 
           </span>
 
@@ -510,6 +713,166 @@ function ContractPage() {
           </div>
 
         </div>
+
+      </section>
+
+
+      {/* ==================================================
+          Owner Controls
+          ================================================== */}
+
+      <section className="mb-6 rounded-xl border border-amber-500/20 bg-slate-950/60 p-6">
+
+        <div className="mb-5 flex items-center justify-between gap-4">
+
+          <div>
+            <h2 className="text-lg font-semibold text-white">
+              Owner Controls
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-400">
+              Emergency controls for the Executor contract.
+            </p>
+          </div>
+
+          <span
+            className={`rounded-lg px-3 py-1 text-xs font-semibold ${
+              isOwner
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : 'bg-red-500/10 text-red-400'
+            }`}
+          >
+            {loading
+              ? 'CHECKING...'
+              : isOwner
+                ? 'OWNER'
+                : 'READ ONLY'}
+          </span>
+
+        </div>
+
+
+        {!isConnected && (
+          <div className="mb-5 rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-400">
+            Connect the Executor owner wallet to use owner controls.
+          </div>
+        )}
+
+
+        {isConnected && !isOwner && (
+          <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            Connected wallet is not the Executor owner.
+            Owner controls are read-only.
+          </div>
+        )}
+
+
+        <div className="grid gap-4 md:grid-cols-2">
+
+          {/* Pause */}
+
+          <button
+            type="button"
+            onClick={handlePauseExecutor}
+            disabled={
+              !isOwner ||
+              ownerActionLoading ||
+              isPaused
+            }
+            className="rounded-lg border border-red-500/30 bg-red-500/10 px-5 py-3 text-sm font-semibold text-red-400 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {ownerActionLoading
+              ? 'Processing...'
+              : isPaused
+                ? 'Contract Already Paused'
+                : 'Pause Contract'}
+          </button>
+
+
+          {/* Unpause */}
+
+          <button
+            type="button"
+            onClick={handleUnpauseExecutor}
+            disabled={
+              !isOwner ||
+              ownerActionLoading ||
+              !isPaused
+            }
+            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {ownerActionLoading
+              ? 'Processing...'
+              : !isPaused
+                ? 'Contract Already Active'
+                : 'Unpause Contract'}
+          </button>
+
+        </div>
+
+
+        {/* Transfer Ownership */}
+
+        <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+          <p className="text-xs uppercase tracking-wide text-slate-400">
+            Transfer Ownership
+          </p>
+
+          <div className="mt-3 flex flex-col gap-3 md:flex-row">
+
+            <input
+              type="text"
+              value={newOwnerAddress}
+              onChange={(event) =>
+                setNewOwnerAddress(
+                  event.target.value,
+                )
+              }
+              disabled={
+                !isOwner ||
+                ownerActionLoading
+              }
+              placeholder="0x..."
+              className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-white outline-none placeholder:text-slate-600 focus:border-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+
+            <button
+              type="button"
+              onClick={handleTransferOwnership}
+              disabled={
+                !isOwner ||
+                ownerActionLoading ||
+                !newOwnerAddress.trim()
+              }
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-3 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {ownerActionLoading
+                ? 'Processing...'
+                : 'Transfer Ownership'}
+            </button>
+
+          </div>
+
+        </div>
+
+
+        {/* Success Message */}
+
+        {ownerActionMessage && (
+          <div className="mt-4 break-all rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-400">
+            {ownerActionMessage}
+          </div>
+        )}
+
+
+        {/* Error Message */}
+
+        {ownerActionError && (
+          <div className="mt-4 break-all rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            {ownerActionError}
+          </div>
+        )}
 
       </section>
 

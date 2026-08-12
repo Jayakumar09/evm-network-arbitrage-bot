@@ -28,13 +28,99 @@ type WindowWithEthereum = Window & {
 }
 
 // ======================================================
-// Executor ABI
+// Executor Read-Only ABI
 // ======================================================
 
-const EXECUTOR_ABI = [
+const EXECUTOR_READ_ABI = [
   'function owner() view returns (address)',
   'function paused() view returns (bool)',
+  'function getTokenBalance(address tokenAddress) view returns (uint256)',
 ]
+
+// ======================================================
+// Executor Write ABI
+// ======================================================
+
+const EXECUTOR_WRITE_ABI = [
+  'function emergencyPause()',
+  'function emergencyUnpause()',
+  'function transferOwnership(address newOwner)',
+]
+
+// ======================================================
+// Emergency Pause Executor
+// ======================================================
+
+export async function emergencyPauseExecutor(): Promise<string> {
+  const provider = await getProvider()
+
+  const signer = await provider.getSigner()
+
+  const executor = new Contract(
+    EXECUTOR_CONTRACT_ADDRESS,
+    EXECUTOR_WRITE_ABI,
+    signer,
+  )
+
+  const transaction =
+    await executor.emergencyPause()
+
+  await transaction.wait()
+
+  return transaction.hash
+}
+
+
+// ======================================================
+// Emergency Unpause Executor
+// ======================================================
+
+export async function emergencyUnpauseExecutor(): Promise<string> {
+  const provider = await getProvider()
+
+  const signer = await provider.getSigner()
+
+  const executor = new Contract(
+    EXECUTOR_CONTRACT_ADDRESS,
+    EXECUTOR_WRITE_ABI,
+    signer,
+  )
+
+  const transaction =
+    await executor.emergencyUnpause()
+
+  await transaction.wait()
+
+  return transaction.hash
+}
+
+
+// ======================================================
+// Transfer Executor Ownership
+// ======================================================
+
+export async function transferExecutorOwnership(
+  newOwner: string,
+): Promise<string> {
+  const provider = await getProvider()
+
+  const signer = await provider.getSigner()
+
+  const executor = new Contract(
+    EXECUTOR_CONTRACT_ADDRESS,
+    EXECUTOR_WRITE_ABI,
+    signer,
+  )
+
+  const transaction =
+    await executor.transferOwnership(
+      newOwner,
+    )
+
+  await transaction.wait()
+
+  return transaction.hash
+}
 
 // ======================================================
 // Get MetaMask Provider
@@ -70,19 +156,27 @@ export async function getConnectedWalletAddress(): Promise<string | null> {
 }
 
 // ======================================================
+// Get Executor Contract
+// ======================================================
+
+async function getExecutorContract(): Promise<Contract> {
+  const provider = await getProvider()
+
+  return new Contract(
+    EXECUTOR_CONTRACT_ADDRESS,
+    EXECUTOR_READ_ABI,
+    provider,
+  )
+}
+
+// ======================================================
 // Get Executor Owner
 // ======================================================
 
 export async function getExecutorOwner(): Promise<string> {
-  const provider = await getProvider()
+  const contract = await getExecutorContract()
 
-  const executor = new Contract(
-    EXECUTOR_CONTRACT_ADDRESS,
-    EXECUTOR_ABI,
-    provider,
-  )
-
-  return await executor.owner()
+  return await contract.owner()
 }
 
 // ======================================================
@@ -90,15 +184,9 @@ export async function getExecutorOwner(): Promise<string> {
 // ======================================================
 
 export async function getExecutorPaused(): Promise<boolean> {
-  const provider = await getProvider()
+  const contract = await getExecutorContract()
 
-  const executor = new Contract(
-    EXECUTOR_CONTRACT_ADDRESS,
-    EXECUTOR_ABI,
-    provider,
-  )
-
-  return await executor.paused()
+  return await contract.paused()
 }
 
 // ======================================================
@@ -175,6 +263,7 @@ export async function getWalletETHBalance(): Promise<string> {
   return formatEther(balance)
 }
 
+
 // ======================================================
 // Get Connected Wallet USDC Balance
 // ======================================================
@@ -200,6 +289,7 @@ export async function getWalletUSDCBalance(): Promise<string> {
 
   return formatUnits(balance, 6)
 }
+
 
 // ======================================================
 // Get Connected Wallet WETH Balance
