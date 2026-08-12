@@ -24,7 +24,10 @@ import {
   getWalletUSDCBalance,
   getWalletWETHBalance,
   transferExecutorOwnership,
+  withdrawExecutorETH,
 } from '../services/blockchain'
+
+import { saveTransaction } from '../services/transactionHistory'
 
 // ======================================================
 // Contract Page
@@ -117,215 +120,521 @@ function ContractPage() {
   // Load Contract Data
   // ======================================================
 
+    // ======================================================
+  // Load Contract Data
+  // ======================================================
+
   useEffect(() => {
-  let mounted = true
 
-  async function loadContractData() {
-    try {
-      setLoading(true)
+    let mounted = true
+    let refreshInProgress = false
 
-      // --------------------------------------------------
-      // Wallet
-      // --------------------------------------------------
+    // ====================================================
+    // Load Contract Data
+    // ====================================================
 
-      const wallet =
-        await getConnectedWalletAddress()
-
-      if (!mounted) return
-
-      setConnectedWallet(wallet)
-      setIsConnected(wallet !== null)
+    async function loadContractData(
+      source: string = 'UNKNOWN',
+    ) {
 
       // --------------------------------------------------
-      // Contract owner
+      // Prevent overlapping refresh requests
       // --------------------------------------------------
 
-      const owner =
-        await getExecutorOwner()
+      if (refreshInProgress) {
 
-      if (!mounted) return
-
-      setContractOwner(owner)
-
-      // --------------------------------------------------
-      // Owner verification
-      // --------------------------------------------------
-
-      if (wallet) {
-        setIsOwner(
-          wallet.toLowerCase() ===
-          owner.toLowerCase(),
+        console.log(
+          '[CONTRACT DEBUG] Refresh skipped - previous refresh still running.',
         )
-      } else {
-        setIsOwner(false)
+
+        return
       }
 
-      // --------------------------------------------------
-      // Paused status
-      // --------------------------------------------------
+      refreshInProgress = true
 
-      const paused =
-        await getExecutorPaused()
+      console.log(
+        '====================================================',
+      )
 
-      if (!mounted) return
+      console.log(
+        `[CONTRACT DEBUG] Refresh START - source: ${source}`,
+      )
 
-      setIsPaused(paused)
+      console.log(
+        `[CONTRACT DEBUG] Time: ${new Date().toLocaleTimeString()}`,
+      )
 
-      // --------------------------------------------------
-      // Contract + Wallet balances
-      // --------------------------------------------------
+      console.log(
+        '====================================================',
+      )
 
-      if (!wallet) {
-        setEthBalance('0.000000')
-        setUsdcBalance('0.00')
-        setWethBalance('0.000000')
+      try {
+
+        if (!mounted) {
+          return
+        }
+
+        setLoading(true)
+
+
+        // --------------------------------------------------
+        // Wallet
+        // --------------------------------------------------
+
+        console.log(
+          '[CONTRACT DEBUG] Reading connected wallet...',
+        )
+
+        const wallet =
+          await getConnectedWalletAddress()
+
+        console.log(
+          '[CONTRACT DEBUG] Connected wallet:',
+          wallet,
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setConnectedWallet(wallet)
+
+        setIsConnected(
+          wallet !== null,
+        )
+
+
+        // --------------------------------------------------
+        // Contract Owner
+        // --------------------------------------------------
+
+        console.log(
+          '[CONTRACT DEBUG] Reading contract owner...',
+        )
+
+        const owner =
+          await getExecutorOwner()
+
+        console.log(
+          '[CONTRACT DEBUG] Contract owner:',
+          owner,
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setContractOwner(owner)
+
+
+        // --------------------------------------------------
+        // Owner Verification
+        // --------------------------------------------------
+
+        const ownerStatus =
+          wallet !== null &&
+          wallet.toLowerCase() ===
+          owner.toLowerCase()
+
+        console.log(
+          '[CONTRACT DEBUG] Owner authorization:',
+          ownerStatus,
+        )
+
+        setIsOwner(
+          ownerStatus,
+        )
+
+
+        // --------------------------------------------------
+        // Paused Status
+        // --------------------------------------------------
+
+        console.log(
+          '[CONTRACT DEBUG] Reading contract paused status...',
+        )
+
+        const paused =
+          await getExecutorPaused()
+
+        console.log(
+          '[CONTRACT DEBUG] Contract paused:',
+          paused,
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setIsPaused(paused)
+
+
+        // --------------------------------------------------
+        // No Wallet
+        // --------------------------------------------------
+
+        if (!wallet) {
+
+          console.log(
+            '[CONTRACT DEBUG] No wallet connected. Resetting balances.',
+          )
+
+          setEthBalance('0.000000')
+          setUsdcBalance('0.00')
+          setWethBalance('0.000000')
+
+          setWalletEthBalance('0.000000')
+          setWalletUsdcBalance('0.00')
+          setWalletWethBalance('0.000000')
+
+          return
+        }
+
+
+        // --------------------------------------------------
+        // Read All Balances
+        // --------------------------------------------------
+
+        console.log(
+          '[CONTRACT DEBUG] Reading blockchain balances...',
+        )
+
+        const [
+          eth,
+          usdc,
+          weth,
+          walletEth,
+          walletUsdc,
+          walletWeth,
+        ] = await Promise.all([
+
+          // Executor contract
+          getExecutorETHBalance(),
+          getExecutorUSDCBalance(),
+          getExecutorWETHBalance(),
+
+          // Connected wallet
+          getWalletETHBalance(),
+          getWalletUSDCBalance(),
+          getWalletWETHBalance(),
+
+        ])
+
+
+        if (!mounted) {
+          return
+        }
+
+
+        // --------------------------------------------------
+        // Debug Raw Values
+        // --------------------------------------------------
+
+        console.log(
+          '[CONTRACT DEBUG] Executor ETH:',
+          eth,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Executor USDC:',
+          usdc,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Executor WETH:',
+          weth,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet ETH:',
+          walletEth,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet USDC:',
+          walletUsdc,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet WETH:',
+          walletWeth,
+        )
+
+
+        // --------------------------------------------------
+        // Executor Contract Balances
+        // --------------------------------------------------
+
+        setEthBalance(
+          Number(eth).toFixed(6),
+        )
+
+        setUsdcBalance(
+          Number(usdc).toFixed(2),
+        )
+
+        setWethBalance(
+          Number(weth).toFixed(6),
+        )
+
+
+        // --------------------------------------------------
+        // Connected Wallet Balances
+        // --------------------------------------------------
+
+        setWalletEthBalance(
+          Number(walletEth).toFixed(6),
+        )
+
+        setWalletUsdcBalance(
+          Number(walletUsdc).toFixed(2),
+        )
+
+        setWalletWethBalance(
+          Number(walletWeth).toFixed(6),
+        )
+
+
+        console.log(
+          '[CONTRACT DEBUG] UI balances updated successfully.',
+        )
+
+      } catch (error) {
+
+        console.error(
+          '[CONTRACT DEBUG] Failed to load contract data:',
+          error,
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setConnectedWallet(null)
+        setIsConnected(false)
+        setIsOwner(false)
 
         setWalletEthBalance('0.000000')
         setWalletUsdcBalance('0.00')
         setWalletWethBalance('0.000000')
 
-        return
-      }
+      } finally {
 
-      const [
-        eth,
-        usdc,
-        weth,
-        walletEth,
-        walletUsdc,
-        walletWeth,
-      ] = await Promise.all([
-        // Executor contract
-        getExecutorETHBalance(),
-        getExecutorUSDCBalance(),
-        getExecutorWETHBalance(),
+        refreshInProgress = false
 
-        // Connected wallet
-        getWalletETHBalance(),
-        getWalletUSDCBalance(),
-        getWalletWETHBalance(),
-      ])
+        if (mounted) {
+          setLoading(false)
+        }
 
-      if (!mounted) return
+        console.log(
+          `[CONTRACT DEBUG] Refresh END - source: ${source}`,
+        )
 
-      // --------------------------------------------------
-      // Executor Contract Balances
-      // --------------------------------------------------
-
-      setEthBalance(
-        Number(eth).toFixed(6),
-      )
-
-      setUsdcBalance(
-        Number(usdc).toFixed(2),
-      )
-
-      setWethBalance(
-        Number(weth).toFixed(6),
-      )
-
-      // --------------------------------------------------
-      // Connected Wallet Balances
-      // --------------------------------------------------
-
-      setWalletEthBalance(
-        Number(walletEth).toFixed(6),
-      )
-
-      setWalletUsdcBalance(
-        Number(walletUsdc).toFixed(2),
-      )
-
-      setWalletWethBalance(
-        Number(walletWeth).toFixed(6),
-      )
-
-    } catch (error) {
-      console.error(
-        'Failed to load contract data:',
-        error,
-      )
-
-      if (!mounted) return
-
-      setConnectedWallet(null)
-      setIsConnected(false)
-      setIsOwner(false)
-
-      setWalletEthBalance('0.000000')
-      setWalletUsdcBalance('0.00')
-      setWalletWethBalance('0.000000')
-
-    } finally {
-      if (mounted) {
-        setLoading(false)
       }
     }
-  }
 
-  // --------------------------------------------------
-  // Initial Load
-  // --------------------------------------------------
 
-  loadContractData()
+    // ====================================================
+    // Initial Load
+    // ====================================================
 
-  // --------------------------------------------------
-  // MetaMask Event Handlers
-  // --------------------------------------------------
+    console.log(
+      '[CONTRACT DEBUG] ContractPage mounted.',
+    )
 
-  const ethereum = window.ethereum
+    loadContractData(
+      'INITIAL_LOAD',
+    )
 
-  if (!ethereum) {
-    return () => {
-      mounted = false
+
+    // ====================================================
+    // Automatic Refresh
+    //
+    // Refresh every 5 seconds.
+    // This allows blockchain balance changes to appear
+    // without pressing CTRL+R.
+    // ====================================================
+
+    const refreshInterval =
+      window.setInterval(
+        () => {
+
+          console.log(
+            '[CONTRACT DEBUG] Automatic 5-second refresh.',
+          )
+
+          loadContractData(
+            'AUTO_REFRESH',
+          )
+
+        },
+        5000,
+      )
+
+
+    // ====================================================
+    // MetaMask Event Handlers
+    // ====================================================
+
+    const ethereum =
+      window.ethereum
+
+
+    if (!ethereum) {
+
+      console.warn(
+        '[CONTRACT DEBUG] MetaMask / window.ethereum not available.',
+      )
+
+      return () => {
+
+        mounted = false
+
+        window.clearInterval(
+          refreshInterval,
+        )
+
+      }
     }
-  }
 
-  const handleAccountsChanged = () => {
-    console.log(
-      'MetaMask account changed. Reloading contract data...',
-    )
 
-    loadContractData()
-  }
+    // ----------------------------------------------------
+    // Account Changed
+    // ----------------------------------------------------
 
-  const handleChainChanged = () => {
-    console.log(
-      'MetaMask network changed. Reloading contract data...',
-    )
+    const handleAccountsChanged =
+      () => {
 
-    loadContractData()
-  }
+        console.log(
+          '[CONTRACT DEBUG] MetaMask account changed.',
+        )
 
-  ethereum.on(
-    'accountsChanged',
-    handleAccountsChanged,
-  )
+        loadContractData(
+          'METAMASK_ACCOUNT_CHANGED',
+        )
+      }
 
-  ethereum.on(
-    'chainChanged',
-    handleChainChanged,
-  )
 
-  // --------------------------------------------------
-  // Cleanup
-  // --------------------------------------------------
+    // ----------------------------------------------------
+    // Chain Changed
+    // ----------------------------------------------------
 
-  return () => {
-    mounted = false
+    const handleChainChanged =
+      () => {
 
-    ethereum.removeListener(
+        console.log(
+          '[CONTRACT DEBUG] MetaMask network changed.',
+        )
+
+        loadContractData(
+          'METAMASK_CHAIN_CHANGED',
+        )
+      }
+
+
+    // ----------------------------------------------------
+    // Window Focus
+    // ----------------------------------------------------
+
+    const handleWindowFocus =
+      () => {
+
+        console.log(
+          '[CONTRACT DEBUG] Browser window focused - refreshing.',
+        )
+
+        loadContractData(
+          'WINDOW_FOCUS',
+        )
+      }
+
+
+    // ----------------------------------------------------
+    // Page Visibility
+    // ----------------------------------------------------
+
+    const handleVisibilityChange =
+      () => {
+
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+
+          console.log(
+            '[CONTRACT DEBUG] Page became visible - refreshing.',
+          )
+
+          loadContractData(
+            'PAGE_VISIBLE',
+          )
+        }
+      }
+
+
+    // ====================================================
+    // Register Events
+    // ====================================================
+
+    ethereum.on(
       'accountsChanged',
       handleAccountsChanged,
     )
 
-    ethereum.removeListener(
+    ethereum.on(
       'chainChanged',
       handleChainChanged,
     )
-  }
 
-}, [])
+    window.addEventListener(
+      'focus',
+      handleWindowFocus,
+    )
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
+
+
+    // ====================================================
+    // Cleanup
+    // ====================================================
+
+    return () => {
+
+      console.log(
+        '[CONTRACT DEBUG] ContractPage unmounted. Cleaning up.',
+      )
+
+      mounted = false
+
+      window.clearInterval(
+        refreshInterval,
+      )
+
+      ethereum.removeListener(
+        'accountsChanged',
+        handleAccountsChanged,
+      )
+
+      ethereum.removeListener(
+        'chainChanged',
+        handleChainChanged,
+      )
+
+      window.removeEventListener(
+        'focus',
+        handleWindowFocus,
+      )
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+    }
+
+  }, [])
 
 
   // ======================================================
@@ -415,6 +724,95 @@ async function handleUnpauseExecutor() {
   }
 }
 
+  // ======================================================
+  // Withdraw Executor ETH
+  // ======================================================
+
+  async function handleWithdrawExecutorETH() {
+    if (!isOwner || !connectedWallet) {
+      return
+    }
+
+    try {
+      setOwnerActionLoading(true)
+      setOwnerActionMessage('')
+      setOwnerActionError('')
+
+      // --------------------------------------------------
+      // Read Executor ETH balance BEFORE withdrawal
+      // --------------------------------------------------
+
+      const withdrawalAmount =
+        await getExecutorETHBalance()
+
+      console.log(
+        '[CONTRACT DEBUG] ETH withdrawal amount:',
+        withdrawalAmount,
+      )
+
+      // --------------------------------------------------
+      // Execute withdrawal
+      // --------------------------------------------------
+
+      const transactionHash =
+        await withdrawExecutorETH(
+          connectedWallet,
+        )
+
+      // --------------------------------------------------
+      // Save successful transaction
+      // --------------------------------------------------
+
+      saveTransaction({
+        hash: transactionHash,
+        status: 'SUCCESS',
+        type: 'ETH_WITHDRAWAL',
+        pair: 'Executor → Owner',
+        amount: `${Number(withdrawalAmount).toFixed(6)} ETH`,
+        grossProfit: '—',
+        netProfit: '—',
+        gas: '—',
+        time: new Date().toLocaleString(),
+      })
+
+      // --------------------------------------------------
+      // Refresh balances after transaction confirmation
+      // --------------------------------------------------
+
+      const [
+        executorEth,
+        walletEth,
+      ] = await Promise.all([
+        getExecutorETHBalance(),
+        getWalletETHBalance(),
+      ])
+
+      setEthBalance(
+        Number(executorEth).toFixed(6),
+      )
+
+      setWalletEthBalance(
+        Number(walletEth).toFixed(6),
+      )
+
+      setOwnerActionMessage(
+        `Executor ETH withdrawn successfully. Transaction: ${transactionHash}`,
+      )
+    } catch (error) {
+      console.error(
+        'Failed to withdraw executor ETH:',
+        error,
+      )
+
+      setOwnerActionError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to withdraw Executor ETH.',
+      )
+    } finally {
+      setOwnerActionLoading(false)
+    }
+  }
 
   // ======================================================
   // Transfer Ownership
@@ -806,6 +1204,39 @@ async function handleUnpauseExecutor() {
               : !isPaused
                 ? 'Contract Already Active'
                 : 'Unpause Contract'}
+          </button>
+
+        </div>
+
+
+        {/* Withdraw ETH */}
+
+        <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+          <p className="text-xs uppercase tracking-wide text-slate-400">
+            Withdraw Executor ETH
+          </p>
+
+          <p className="mt-2 text-sm text-slate-400">
+            Withdraw the entire native ETH balance of the Executor to the connected owner wallet.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleWithdrawExecutorETH}
+            disabled={
+              !isOwner ||
+              ownerActionLoading ||
+              isPaused ||
+              !connectedWallet
+            }
+            className="mt-4 w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {ownerActionLoading
+              ? 'Processing...'
+              : isPaused
+                ? 'Contract Paused'
+                : 'Withdraw All ETH to Owner Wallet'}
           </button>
 
         </div>

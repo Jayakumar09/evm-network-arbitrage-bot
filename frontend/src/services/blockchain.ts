@@ -45,7 +45,38 @@ const EXECUTOR_WRITE_ABI = [
   'function emergencyPause()',
   'function emergencyUnpause()',
   'function transferOwnership(address newOwner)',
+  'function withdrawEth(address to)',
+
+  // Flash Loan Arbitrage
+  'function executeFlashLoanArbitrage(address asset, uint256 amount, bytes params)',
 ]
+
+// ======================================================
+// Withdraw Executor ETH
+// ======================================================
+
+export async function withdrawExecutorETH(
+  to: string,
+): Promise<string> {
+  const provider = await getProvider()
+
+  const signer = await provider.getSigner()
+
+  const executor = new Contract(
+    EXECUTOR_CONTRACT_ADDRESS,
+    EXECUTOR_WRITE_ABI,
+    signer,
+  )
+
+  const transaction =
+    await executor.withdrawEth(
+      to,
+    )
+
+  await transaction.wait()
+
+  return transaction.hash
+}
 
 // ======================================================
 // Emergency Pause Executor
@@ -121,6 +152,47 @@ export async function transferExecutorOwnership(
 
   return transaction.hash
 }
+
+
+    // ======================================================
+    // Execute Flash Loan Arbitrage
+    // Ethereum Sepolia
+    // ======================================================
+
+    export async function executeFlashLoanArbitrage(
+    asset: string,
+    amount: bigint,
+    params: string,
+    ): Promise<string> {
+    const provider =
+        await getProvider()
+
+
+    const signer =
+        await provider.getSigner()
+
+
+    const executor =
+        new Contract(
+        EXECUTOR_CONTRACT_ADDRESS,
+        EXECUTOR_WRITE_ABI,
+        signer,
+        )
+
+
+    const transaction =
+        await executor.executeFlashLoanArbitrage(
+        asset,
+        amount,
+        params,
+        )
+
+
+    await transaction.wait()
+
+
+    return transaction.hash
+    }
 
 // ======================================================
 // Get MetaMask Provider
