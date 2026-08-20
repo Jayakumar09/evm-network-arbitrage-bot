@@ -1,43 +1,16 @@
-// ======================================================
-// Transaction Status
-// Ethereum Sepolia
-// ======================================================
-
+import { useEffect, useState } from 'react'
 import {
-  useEffect,
-  useState,
-} from 'react'
-
-import {
-  getProvider,
-} from '../services/blockchain'
-
+  BrowserProvider,
+} from 'ethers'
 
 // ======================================================
-// Transaction State
-// ======================================================
-
-type TransactionState =
-  | 'IDLE'
-  | 'PENDING'
-  | 'CONFIRMED'
-  | 'FAILED'
-
-
-// ======================================================
-// Props
+// Transaction Status Props
 // ======================================================
 
 interface TransactionStatusProps {
-  transactionHash?: string | null
-
-  onConfirmed?: () => void | Promise<void>
-
-  pollingInterval?: number
-
-  className?: string
+  transactionHash: string
+  onConfirmed?: () => void
 }
-
 
 // ======================================================
 // Transaction Status
@@ -46,321 +19,206 @@ interface TransactionStatusProps {
 function TransactionStatus({
   transactionHash,
   onConfirmed,
-  pollingInterval = 3000,
-  className = '',
 }: TransactionStatusProps) {
 
-  // ======================================================
-  // State
-  // ======================================================
+  const [
+    status,
+    setStatus,
+  ] = useState<
+    'WAITING' | 'CONFIRMED' | 'FAILED'
+  >('WAITING')
 
-  const [status, setStatus] =
-    useState<TransactionState>('IDLE')
+  const [
+    error,
+    setError,
+  ] = useState<string | null>(null)
 
-  const [error, setError] =
-    useState<string | null>(null)
-
-
-  // ======================================================
-  // Monitor Transaction
-  // ======================================================
+  // ====================================================
+  // Wait For Blockchain Confirmation
+  // ====================================================
 
   useEffect(() => {
 
     let mounted = true
 
-    let timer:
-      ReturnType<typeof setTimeout> | null = null
-
-
-    // --------------------------------------------------
-    // No Transaction
-    // --------------------------------------------------
-
-    if (!transactionHash) {
-      setStatus('IDLE')
-      setError(null)
-
-      return () => {
-        mounted = false
-      }
-    }
-
-
-    // --------------------------------------------------
-    // Start Pending State
-    // --------------------------------------------------
-
-    setStatus('PENDING')
-    setError(null)
-
-
-    // ==================================================
-    // Check Transaction
-    // ==================================================
-
-    async function checkTransaction() {
-
-      if (!transactionHash) {
-        return
-      }
+    async function waitForConfirmation() {
 
       try {
 
+        const ethereum =
+          window.ethereum
+
+        if (!ethereum) {
+          throw new Error(
+            'MetaMask is not installed.',
+          )
+        }
+
         const provider =
-          await getProvider()
+          new BrowserProvider(
+            ethereum,
+          )
 
+        const receipt =
+          await provider.waitForTransaction(
+            transactionHash,
+          )
 
-        const hash = transactionHash
-
-            if (!hash) {
-            return
-            }
-
-            const receipt =
-            await provider.getTransactionReceipt(
-                hash,
-            )
-
-
-        // ------------------------------------------------
-        // Transaction Still Pending
-        // ------------------------------------------------
+        if (!mounted) {
+          return
+        }
 
         if (!receipt) {
+          throw new Error(
+            'Transaction confirmation was not received.',
+          )
+        }
 
-          if (!mounted) {
-            return
-          }
+        if (
+          receipt.status !== 1
+        ) {
+          setStatus('FAILED')
 
-
-          setStatus('PENDING')
-
-
-          timer = setTimeout(
-            checkTransaction,
-            pollingInterval,
+          setError(
+            'Transaction reverted on-chain.',
           )
 
           return
         }
 
+        setStatus(
+          'CONFIRMED',
+        )
 
-        // ------------------------------------------------
-        // Transaction Confirmed
-        // ------------------------------------------------
+        setError(null)
 
-        if (receipt.status === 1) {
-
-          if (!mounted) {
-            return
+        if (onConfirmed) {
+            onConfirmed()
           }
-
-
-          setStatus('CONFIRMED')
-
-
-          // ----------------------------------------------
-          // Refresh Parent Data
-          // ----------------------------------------------
-
-          if (onConfirmed) {
-            await onConfirmed()
-          }
-
-
-          return
-        }
-
-
-        // ------------------------------------------------
-        // Transaction Failed
-        // ------------------------------------------------
+      } catch (transactionError) {
 
         if (!mounted) {
           return
         }
-
 
         setStatus('FAILED')
 
         setError(
-          'Transaction reverted on the blockchain.',
-        )
-
-      } catch (transactionError) {
-
-        console.error(
-          'Failed to check transaction:',
-          transactionError,
-        )
-
-
-        if (!mounted) {
-          return
-        }
-
-
-        setError(
           transactionError instanceof Error
             ? transactionError.message
-            : 'Failed to check transaction status.',
-        )
-
-
-        // ------------------------------------------------
-        // Keep Checking
-        // ------------------------------------------------
-
-        timer = setTimeout(
-          checkTransaction,
-          pollingInterval,
+            : 'Transaction confirmation failed.',
         )
       }
     }
 
-
-    checkTransaction()
-
-
-    // ==================================================
-    // Cleanup
-    // ==================================================
+    waitForConfirmation()
 
     return () => {
-
       mounted = false
-
-      if (timer) {
-        clearTimeout(timer)
-      }
     }
 
   }, [
     transactionHash,
-    pollingInterval,
-    onConfirmed,
-  ])
+ ])
 
-
-  // ======================================================
-  // IDLE
-  // ======================================================
-
-  if (
-    !transactionHash ||
-    status === 'IDLE'
-  ) {
-    return null
-  }
-
-
-  // ======================================================
-  // Render Status
-  // ======================================================
+  // ====================================================
+  // Render
+  // ====================================================
 
   return (
-    <div
-      className={[
-        'rounded-lg border px-4 py-3',
-        className,
-      ].join(' ')}
-    >
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+
+      <h2 className="text-lg font-semibold text-white">
+        Transaction Status
+      </h2>
 
       {/* ==================================================
-          Pending
+          Waiting
           ================================================== */}
 
-      {status === 'PENDING' && (
-        <div className="flex items-center gap-3">
+      {status === 'WAITING' && (
 
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-amber-400" />
+        <div className="mt-4">
 
-          <div>
+          <div className="flex items-center gap-3">
 
-            <p className="text-sm font-semibold text-amber-400">
-              Transaction Pending
-            </p>
+            <span className="h-3 w-3 animate-pulse rounded-full bg-amber-400" />
 
-            <p className="mt-1 break-all font-mono text-xs text-slate-500">
-              {transactionHash}
+            <p className="font-medium text-amber-400">
+              Waiting for confirmation...
             </p>
 
           </div>
 
+          <p className="mt-3 break-all font-mono text-sm text-slate-400">
+            {transactionHash}
+          </p>
+
         </div>
       )}
-
 
       {/* ==================================================
           Confirmed
           ================================================== */}
 
       {status === 'CONFIRMED' && (
-        <div className="flex items-center gap-3">
 
-          <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-400" />
+        <div className="mt-4">
 
-          <div>
+          <div className="flex items-center gap-3">
 
-            <p className="text-sm font-semibold text-emerald-400">
-              Transaction Confirmed
-            </p>
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-bold text-emerald-400">
+              ✓
+            </span>
 
-            <p className="mt-1 break-all font-mono text-xs text-slate-500">
-              {transactionHash}
+            <p className="font-medium text-emerald-400">
+              Transaction confirmed
             </p>
 
           </div>
 
+          <p className="mt-3 break-all font-mono text-sm text-slate-400">
+            {transactionHash}
+          </p>
+
         </div>
       )}
-
 
       {/* ==================================================
           Failed
           ================================================== */}
 
       {status === 'FAILED' && (
-        <div className="flex items-start gap-3">
 
-          <span className="mt-1 h-2.5 w-2.5 rounded-full bg-red-400" />
+        <div className="mt-4">
 
-          <div>
+          <div className="flex items-center gap-3">
 
-            <p className="text-sm font-semibold text-red-400">
-              Transaction Failed
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/15 text-xs font-bold text-red-400">
+              ×
+            </span>
+
+            <p className="font-medium text-red-400">
+              Transaction failed
             </p>
-
-            <p className="mt-1 break-all font-mono text-xs text-slate-500">
-              {transactionHash}
-            </p>
-
-            {error && (
-              <p className="mt-2 text-xs text-red-400">
-                {error}
-              </p>
-            )}
 
           </div>
 
+          {error && (
+            <p className="mt-3 break-words text-sm text-slate-400">
+              {error}
+            </p>
+          )}
+
+          <p className="mt-3 break-all font-mono text-sm text-slate-500">
+            {transactionHash}
+          </p>
+
         </div>
-      )}
-
-
-      {/* ==================================================
-          Error While Checking
-          ================================================== */}
-
-      {status === 'PENDING' && error && (
-        <p className="mt-2 text-xs text-slate-500">
-          Status check temporarily failed. Retrying automatically...
-        </p>
       )}
 
     </div>
   )
 }
-
 
 export default TransactionStatus

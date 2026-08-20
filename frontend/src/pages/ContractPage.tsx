@@ -27,7 +27,9 @@ import {
   withdrawExecutorETH,
 } from '../services/blockchain'
 
-import { saveTransaction } from '../services/transactionHistory'
+import {
+  saveTransaction,
+} from '../services/transactionHistory'
 
 // ======================================================
 // Contract Page
@@ -134,8 +136,9 @@ function ContractPage() {
     // ====================================================
 
     async function loadContractData(
-      source: string = 'UNKNOWN',
-    ) {
+        source: string = 'UNKNOWN',
+        showLoading: boolean = false,
+      ) {
 
       // --------------------------------------------------
       // Prevent overlapping refresh requests
@@ -174,7 +177,9 @@ function ContractPage() {
           return
         }
 
-        setLoading(true)
+       if (showLoading) {
+          setLoading(true)
+        }
 
 
         // --------------------------------------------------
@@ -418,18 +423,20 @@ function ContractPage() {
         setWalletUsdcBalance('0.00')
         setWalletWethBalance('0.000000')
 
-      } finally {
+      }finally {
 
         refreshInProgress = false
 
-        if (mounted) {
+        if (
+          mounted &&
+          showLoading
+        ) {
           setLoading(false)
         }
 
         console.log(
           `[CONTRACT DEBUG] Refresh END - source: ${source}`,
         )
-
       }
     }
 
@@ -443,8 +450,9 @@ function ContractPage() {
     )
 
     loadContractData(
-      'INITIAL_LOAD',
-    )
+        'INITIAL_LOAD',
+        true,
+      )
 
 
     // ====================================================
@@ -723,6 +731,7 @@ async function handleUnpauseExecutor() {
     setOwnerActionLoading(false)
   }
 }
+
 
   // ======================================================
   // Withdraw Executor ETH

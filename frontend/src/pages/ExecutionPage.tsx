@@ -20,6 +20,7 @@ import { useArbitrage } from '../context/ArbitrageContext'
 
 import {
   executeFlashLoanArbitrage,
+  simulateFlashLoanArbitrage,
   getConnectedWalletAddress,
   getExecutorOwner,
   getExecutorPaused,
@@ -109,6 +110,47 @@ function toTokenUnits(
   return parseUnits(
     normalized,
     decimals,
+  )
+}
+
+// ======================================================
+// Resolve Token Address
+// Ethereum Sepolia
+// ======================================================
+
+function resolveTokenAddress(
+  token: string,
+): string {
+
+  const normalizedToken =
+    token.trim().toUpperCase()
+
+  // ----------------------------------------------------
+  // Already an Ethereum address
+  // ----------------------------------------------------
+
+  if (isAddress(token)) {
+    return token
+  }
+
+  // ----------------------------------------------------
+  // Configured Sepolia tokens
+  // ----------------------------------------------------
+
+  if (normalizedToken === 'USDC') {
+    return USDC_ADDRESS
+  }
+
+  if (normalizedToken === 'WETH') {
+    return WETH_ADDRESS
+  }
+
+  // ----------------------------------------------------
+  // Unsupported token
+  // ----------------------------------------------------
+
+  throw new Error(
+    `Unsupported token: ${token}. Only configured Sepolia USDC and WETH are currently supported.`,
   )
 }
 
@@ -566,58 +608,13 @@ function ExecutionPage() {
   // Execute Arbitrage
   // ====================================================
 
-  // ====================================================
-// Execute Arbitrage
-// ====================================================
-
-    async function handleExecuteArbitrage() {
-
-      console.log(
-        '====================================================',
-      )
-      console.log(
-        '[EXECUTION DEBUG] handleExecuteArbitrage START',
-      )
-      console.log(
-        '====================================================',
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] opportunity:',
-        opportunity,
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] walletAddress:',
-        walletAddress,
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] isOwner:',
-        isOwner,
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] isPaused:',
-        isPaused,
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] executionState BEFORE:',
-        executionState,
-      )
-
+        async function handleExecuteArbitrage() {
 
       // --------------------------------------------------
       // Opportunity Check
       // --------------------------------------------------
 
       if (!opportunity) {
-
-        console.error(
-          '[EXECUTION DEBUG] STOP: No opportunity available.',
-        )
-
         setExecutionError(
           'No arbitrage opportunity available.',
         )
@@ -625,106 +622,84 @@ function ExecutionPage() {
         return
       }
 
-
-      console.log(
-        '[EXECUTION DEBUG] Opportunity exists.',
-      )
-
-
       setExecutionError(null)
 
-
       // --------------------------------------------------
-      // Wallet Check
+      // Wallet / Executor Access Check
+      //
+      // Refresh these values immediately before execution.
+      // This prevents an account or network change after
+      // the page was loaded from using stale access state.
       // --------------------------------------------------
 
-      if (!walletAddress) {
+      try {
+
+        const [
+          currentWallet,
+          currentOwner,
+          currentPaused,
+        ] = await Promise.all([
+          getConnectedWalletAddress(),
+          getExecutorOwner(),
+          getExecutorPaused(),
+        ])
+
+        setWalletAddress(currentWallet)
+        setIsOwner(
+          currentWallet !== null &&
+          currentWallet.toLowerCase() ===
+            currentOwner.toLowerCase(),
+        )
+        setIsPaused(currentPaused)
+
+        if (!currentWallet) {
+          setExecutionError(
+            'Connect the Executor owner wallet before execution.',
+          )
+
+          return
+        }
+
+        if (
+          currentWallet.toLowerCase() !==
+          currentOwner.toLowerCase()
+        ) {
+          setExecutionError(
+            'Connected wallet is not the Executor owner.',
+          )
+
+          return
+        }
+
+        if (currentPaused) {
+          setExecutionError(
+            'Executor contract is currently paused.',
+          )
+
+          return
+        }
+
+      } catch (accessError) {
 
         console.error(
-          '[EXECUTION DEBUG] STOP: Wallet not connected.',
+          '[EXECUTION DEBUG] Failed to refresh executor access:',
+          accessError,
         )
 
         setExecutionError(
-          'Connect the Executor owner wallet before execution.',
+          accessError instanceof Error
+            ? `Executor access check failed: ${accessError.message}`
+            : 'Executor access check failed.',
         )
 
         return
       }
-
-
-      console.log(
-        '[EXECUTION DEBUG] Wallet check PASSED:',
-        walletAddress,
-      )
-
-
-      // --------------------------------------------------
-      // Owner Check
-      // --------------------------------------------------
-
-      if (!isOwner) {
-
-        console.error(
-          '[EXECUTION DEBUG] STOP: Connected wallet is NOT Executor owner.',
-        )
-
-        setExecutionError(
-          'Connected wallet is not the Executor owner.',
-        )
-
-        return
-      }
-
-
-      console.log(
-        '[EXECUTION DEBUG] Owner check PASSED.',
-      )
-
-
-      // --------------------------------------------------
-      // Paused Check
-      // --------------------------------------------------
-
-      if (isPaused) {
-
-        console.error(
-          '[EXECUTION DEBUG] STOP: Executor contract is paused.',
-        )
-
-        setExecutionError(
-          'Executor contract is currently paused.',
-        )
-
-        return
-      }
-
-
-      console.log(
-        '[EXECUTION DEBUG] Contract paused check PASSED.',
-      )
-
 
       // --------------------------------------------------
       // Opportunity Checks
       // --------------------------------------------------
 
-      console.log(
-        '[EXECUTION DEBUG] isProfitable:',
-        opportunity.isProfitable,
-      )
-
-      console.log(
-        '[EXECUTION DEBUG] isStale:',
-        opportunity.isStale,
-      )
-
-
       if (!opportunity.isProfitable) {
-
-        console.error(
-          '[EXECUTION DEBUG] STOP: Opportunity is NOT profitable.',
-        )
-
         setExecutionError(
           'Opportunity is not profitable.',
         )
@@ -732,13 +707,7 @@ function ExecutionPage() {
         return
       }
 
-
       if (opportunity.isStale) {
-
-        console.error(
-          '[EXECUTION DEBUG] STOP: Opportunity quote is STALE.',
-        )
-
         setExecutionError(
           'Opportunity quote is stale. Scan again before execution.',
         )
@@ -746,83 +715,72 @@ function ExecutionPage() {
         return
       }
 
-
-      console.log(
-        '[EXECUTION DEBUG] Opportunity checks PASSED.',
-      )
-
-
       try {
 
         // ------------------------------------------------
         // Waiting for Wallet
         // ------------------------------------------------
 
-        console.log(
-          '[EXECUTION DEBUG] Setting state: WAITING_FOR_WALLET',
-        )
-
         setExecutionState(
           'WAITING_FOR_WALLET',
         )
 
         setExecutionError(null)
+        setTransactionHash(null)
 
+        // ------------------------------------------------
+        // Resolve Token Addresses
+        //
+        // opportunity.tokenIn / tokenOut may contain:
+        //
+        // USDC
+        // WETH
+        //
+        // or actual Ethereum addresses.
+        // ------------------------------------------------
+
+        const tokenInAddress =
+          resolveTokenAddress(
+            opportunity.tokenIn,
+          )
+
+        const tokenOutAddress =
+          resolveTokenAddress(
+            opportunity.tokenOut,
+          )
 
         // ------------------------------------------------
         // Token Validation
         // ------------------------------------------------
 
-        console.log(
-          '[EXECUTION DEBUG] tokenIn:',
-          opportunity.tokenIn,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] tokenOut:',
-          opportunity.tokenOut,
-        )
-
-
         if (
           !isAddress(
-            opportunity.tokenIn,
+            tokenInAddress,
           )
         ) {
-
           throw new Error(
             'Token In is not a valid Ethereum address.',
           )
         }
 
-
         if (
           !isAddress(
-            opportunity.tokenOut,
+            tokenOutAddress,
           )
         ) {
-
           throw new Error(
             'Token Out is not a valid Ethereum address.',
           )
         }
 
-
         if (
-          opportunity.tokenIn.toLowerCase() ===
-          opportunity.tokenOut.toLowerCase()
+          tokenInAddress.toLowerCase() ===
+          tokenOutAddress.toLowerCase()
         ) {
-
           throw new Error(
             'Token In and Token Out must be different.',
           )
         }
-
-
-        console.log(
-          '[EXECUTION DEBUG] Token validation PASSED.',
-        )
-
 
         // ------------------------------------------------
         // Token Decimals
@@ -830,25 +788,12 @@ function ExecutionPage() {
 
         const tokenInDecimals =
           getTokenDecimals(
-            opportunity.tokenIn,
+            tokenInAddress,
           )
-
-
-        console.log(
-          '[EXECUTION DEBUG] tokenInDecimals:',
-          tokenInDecimals,
-        )
-
 
         // ------------------------------------------------
         // Flash Loan Amount
         // ------------------------------------------------
-
-        console.log(
-          '[EXECUTION DEBUG] loanAmount:',
-          opportunity.loanAmount,
-        )
-
 
         const amount =
           toTokenUnits(
@@ -856,247 +801,333 @@ function ExecutionPage() {
             tokenInDecimals,
           )
 
-
-        console.log(
-          '[EXECUTION DEBUG] amount bigint:',
-          amount.toString(),
-        )
-
-
         if (amount <= 0n) {
-
           throw new Error(
             'Flash loan amount must be greater than zero.',
           )
         }
 
-
-        console.log(
-          '[EXECUTION DEBUG] Flash loan amount validation PASSED.',
-        )
-
-
         // ------------------------------------------------
-        // Build Params
+        // Build Flash Loan Parameters
         // ------------------------------------------------
-
-        console.log(
-          '[EXECUTION DEBUG] firstDex:',
-          firstDex,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] uniFee:',
-          opportunity.uniFee,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] minOut1:',
-          opportunity.minOut1,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] minOut2:',
-          opportunity.minOut2,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] minProfit:',
-          opportunity.minProfit,
-        )
-
 
         const params =
           buildDexArbitrageParams(
             firstDex,
-            opportunity.tokenIn,
-            opportunity.tokenOut,
+            tokenInAddress,
+            tokenOutAddress,
             opportunity.uniFee,
             opportunity.minOut1,
             opportunity.minOut2,
             opportunity.minProfit,
           )
 
+        // ------------------------------------------------
+        // Encoded Parameter Diagnostics
+        // ------------------------------------------------
+
+        console.log(
+          '[EXECUTION DEBUG] Encoded params length:',
+          params.length,
+        )
 
         console.log(
           '[EXECUTION DEBUG] Encoded params:',
           params,
         )
 
-        console.log(
-          '[EXECUTION DEBUG] Params length:',
-          params.length,
-        )
-
-
         // ------------------------------------------------
-        // Set Transaction Pending
+        // Pre-flight simulation
         // ------------------------------------------------
 
         console.log(
-          '[EXECUTION DEBUG] Setting state: TRANSACTION_PENDING',
+          '==================================================',
         )
+
+        console.log(
+          '[EXECUTION DEBUG] Flash Loan Simulation START',
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Token In:',
+          opportunity.tokenIn,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Token Out:',
+          opportunity.tokenOut,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Token In Decimals:',
+          tokenInDecimals,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Loan Amount Raw:',
+          amount.toString(),
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Loan Amount Formatted:',
+          opportunity.loanAmount,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] First DEX:',
+          firstDex,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Uni Fee:',
+          opportunity.uniFee,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Output #1:',
+          opportunity.minOut1,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Output #1 Raw:',
+          toTokenUnits(
+            opportunity.minOut1,
+            getTokenDecimals(tokenOutAddress),
+          ).toString(),
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Output #2:',
+          opportunity.minOut2,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Output #2 Raw:',
+          toTokenUnits(
+            opportunity.minOut2,
+            tokenInDecimals,
+          ).toString(),
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Profit:',
+          opportunity.minProfit,
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Minimum Profit Raw:',
+          toTokenUnits(
+            opportunity.minProfit,
+            tokenInDecimals,
+          ).toString(),
+        )
+
+        console.log(
+          '[EXECUTION DEBUG] Params:',
+          params,
+        )
+
+               try {
+
+          // ------------------------------------------------
+          // Run pre-flight simulation
+          //
+          // simulateFlashLoanArbitrage() returns:
+          //
+          // true  = contract simulation succeeded
+          // false = contract simulation reverted
+          //
+          // IMPORTANT:
+          // Never continue to a real transaction when
+          // simulation returns false.
+          // ------------------------------------------------
+
+          const simulationResult =
+            await simulateFlashLoanArbitrage(
+              tokenInAddress,
+              amount,
+              params,
+            )
+
+          console.log(
+            '[EXECUTION DEBUG] Simulation result:',
+            simulationResult,
+          )
+
+          // ------------------------------------------------
+          // HARD SAFETY GATE
+          // ------------------------------------------------
+
+          if (!simulationResult) {
+
+            console.error(
+              '[EXECUTION DEBUG] Flash Loan Simulation FAILED',
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Real transaction BLOCKED.',
+            )
+
+            setExecutionState(
+              'FAILED',
+            )
+
+            setExecutionError(
+              'Flash loan simulation failed. The transaction was blocked before MetaMask execution.',
+            )
+
+            return
+          }
+
+          // ------------------------------------------------
+          // Simulation passed
+          // ------------------------------------------------
+
+          console.log(
+            '[EXECUTION DEBUG] Flash Loan Simulation SUCCESS',
+          )
+
+          console.log(
+            '[EXECUTION DEBUG] Simulation passed. Transaction may proceed.',
+          )
+
+        } catch (simulationError) {
+
+          console.error(
+            '[EXECUTION DEBUG] Flash Loan Simulation FAILED',
+            simulationError,
+          )
+
+          // ------------------------------------------------
+          // Extract detailed ethers error information
+          // ------------------------------------------------
+
+          if (
+            simulationError &&
+            typeof simulationError === 'object'
+          ) {
+
+            const error =
+              simulationError as Record<string, unknown>
+
+            console.error(
+              '[EXECUTION DEBUG] Error code:',
+              error.code,
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Error reason:',
+              error.reason,
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Error shortMessage:',
+              error.shortMessage,
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Error data:',
+              error.data,
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Error transaction:',
+              error.transaction,
+            )
+
+            console.error(
+              '[EXECUTION DEBUG] Error info:',
+              error.info,
+            )
+          }
+
+          setExecutionState(
+            'FAILED',
+          )
+
+          setExecutionError(
+            simulationError instanceof Error
+              ? `Simulation failed: ${simulationError.message}`
+              : 'Flash loan simulation failed.',
+          )
+
+          return
+        }
+
+        console.log(
+          '[EXECUTION DEBUG] Flash Loan Simulation END',
+        )
+
+        console.log(
+          '==================================================',
+        )
+
+        // ------------------------------------------------
+        // Transaction Pending
+        //
+        // The actual blockchain confirmation is handled
+        // by TransactionStatus.tsx.
+        // ------------------------------------------------
 
         setExecutionState(
           'TRANSACTION_PENDING',
         )
 
-
         // ------------------------------------------------
-        // Execute
+        // Execute Flash Loan Arbitrage
         // ------------------------------------------------
-
-        console.log(
-          '====================================================',
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] CALLING executeFlashLoanArbitrage()',
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] asset:',
-          opportunity.tokenIn,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] amount:',
-          amount.toString(),
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] params:',
-          params,
-        )
-
-        console.log(
-          '====================================================',
-        )
-
 
         const hash =
           await executeFlashLoanArbitrage(
-            opportunity.tokenIn,
+            tokenInAddress,
             amount,
             params,
           )
 
-
         // ------------------------------------------------
-        // Transaction Returned
+        // Validate Transaction Hash
         // ------------------------------------------------
-
-        console.log(
-          '====================================================',
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] executeFlashLoanArbitrage() RETURNED',
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] transaction hash:',
-          hash,
-        )
-
-        console.log(
-          '====================================================',
-        )
-
 
         if (!hash) {
-
-          console.error(
-            '[EXECUTION DEBUG] ERROR: Transaction hash is empty.',
-          )
-
           throw new Error(
             'Transaction was submitted but no transaction hash was returned.',
           )
         }
 
-
         // ------------------------------------------------
         // Save Transaction Hash
+        //
+        // TransactionStatus will now wait for the
+        // blockchain confirmation.
         // ------------------------------------------------
 
-        console.log(
-          '[EXECUTION DEBUG] Setting transactionHash:',
+        setTransactionHash(
           hash,
         )
 
-        setTransactionHash(hash)
-
+        console.log(
+          '[EXECUTION DEBUG] Transaction submitted:',
+          hash,
+        )
 
         // ------------------------------------------------
-        // Confirmation
+        // Close Confirmation Dialog
         // ------------------------------------------------
 
-        console.log(
-          '[EXECUTION DEBUG] Setting state: CONFIRMED',
-        )
-
-        setExecutionState(
-          'CONFIRMED',
-        )
-
-
-        console.log(
-          '[EXECUTION DEBUG] Closing confirmation dialog.',
-        )
-
-        setShowConfirmation(false)
-
-
-        console.log(
-          '[EXECUTION DEBUG] EXECUTION SUCCESS',
+        setShowConfirmation(
+          false,
         )
 
       } catch (error) {
 
         console.error(
-          '====================================================',
-        )
-
-        console.error(
-          '[EXECUTION DEBUG] EXECUTION FAILED',
-        )
-
-        console.error(
-          '[EXECUTION DEBUG] Error object:',
+          'Flash loan arbitrage execution failed:',
           error,
         )
-
-        console.error(
-          '[EXECUTION DEBUG] Error message:',
-          error instanceof Error
-            ? error.message
-            : 'Unknown error',
-        )
-
-        console.error(
-          '[EXECUTION DEBUG] Error name:',
-          error instanceof Error
-            ? error.name
-            : 'Unknown',
-        )
-
-        console.error(
-          '[EXECUTION DEBUG] Error stack:',
-          error instanceof Error
-            ? error.stack
-            : 'No stack available',
-        )
-
-        console.error(
-          '====================================================',
-        )
-
 
         setExecutionState(
           'FAILED',
         )
-
 
         setExecutionError(
           error instanceof Error
@@ -1167,6 +1198,8 @@ function ExecutionPage() {
       'WAITING_FOR_WALLET' ||
     executionState ===
       'TRANSACTION_PENDING' ||
+    executionState ===
+      'CONFIRMED' ||
     !walletAddress ||
     !isOwner ||
     isPaused ||
@@ -1345,60 +1378,65 @@ function ExecutionPage() {
         </div>
 
 
-        {/* ==================================================
-            Safety Parameters
-            ================================================== */}
+       {/* ==================================================
+          Safety Parameters
+          ================================================== */}
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
 
-          <h2 className="text-lg font-semibold text-white">
-            Safety Parameters
-          </h2>
+        <h2 className="text-lg font-semibold text-white">
+          Safety Parameters
+        </h2>
 
+        <div className="mt-5 space-y-4">
 
-          <div className="mt-5 space-y-4">
+          <ExecutionRow
+            label="DEX #1 Expected Output"
+            value={`${opportunity.amountOut1} ${opportunity.tokenOut}`}
+          />
 
-            <ExecutionRow
-              label="Minimum Output #1"
-              value={opportunity.minOut1}
-            />
+          <ExecutionRow
+            label="DEX #1 Minimum Output"
+            value={`${opportunity.minOut1} ${opportunity.tokenOut}`}
+          />
 
+          <ExecutionRow
+            label="DEX #2 Expected Output"
+            value={`${opportunity.amountOut2} ${opportunity.tokenIn}`}
+          />
 
-            <ExecutionRow
-              label="Minimum Output #2"
-              value={opportunity.minOut2}
-            />
+          <ExecutionRow
+            label="DEX #2 Minimum Output"
+            value={`${opportunity.minOut2} ${opportunity.tokenIn}`}
+          />
 
+          <ExecutionRow
+            label="Minimum Profit"
+            value={`$${opportunity.minProfit}`}
+          />
 
-            <ExecutionRow
-              label="Minimum Profit"
-              value={`$${opportunity.minProfit}`}
-            />
+          <ExecutionRow
+            label="Estimated Gas"
+            value={`$${opportunity.estimatedGas}`}
+          />
 
-
-            <ExecutionRow
-              label="Estimated Gas"
-              value={`$${opportunity.estimatedGas}`}
-            />
-
-
-            <ExecutionRow
-              label="Quote Status"
-              value={
-                opportunity.isStale
-                  ? 'STALE'
-                  : 'CURRENT'
-              }
-              valueClassName={
-                opportunity.isStale
-                  ? 'text-red-400'
-                  : 'text-emerald-400'
-              }
-            />
-
-          </div>
+          <ExecutionRow
+            label="Quote Status"
+            value={
+              opportunity.isStale
+                ? 'STALE'
+                : 'CURRENT'
+            }
+            valueClassName={
+              opportunity.isStale
+                ? 'text-red-400'
+                : 'text-emerald-400'
+            }
+          />
 
         </div>
+
+      </div>
 
       </section>
 
@@ -1564,7 +1602,16 @@ function ExecutionPage() {
           {executionState ===
             'WAITING_FOR_WALLET'
             ? 'Waiting for MetaMask...'
-            : 'Confirm & Execute'}
+            : executionState ===
+                'TRANSACTION_PENDING'
+              ? 'Transaction Pending...'
+              : executionState ===
+                  'CONFIRMED'
+                ? 'Flash Loan Completed ✓'
+                : executionState ===
+                    'FAILED'
+                  ? 'Retry Execution'
+                  : 'Confirm & Execute'}
         </button>
 
       </div>

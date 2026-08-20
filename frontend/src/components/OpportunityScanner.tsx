@@ -1,85 +1,689 @@
 import { useState } from 'react'
+
+import {
+  useArbitrage,
+} from '../context/ArbitrageContext'
+
+import {
+  formatUnits,
+  parseUnits,
+} from 'ethers'
+
+import {
+  getUniswapV3Quote,
+  getV2Quote,
+} from '../services/blockchain'
+
+import {
+  USDC_ADDRESS,
+  WETH_ADDRESS,
+} from '../config/contracts'
+
 import type {
   ArbitrageOpportunity,
   DexType,
 } from '../types/arbitrage'
 
-interface OpportunityScannerProps {
-  onOpportunityFound: (
-    opportunity: ArbitrageOpportunity,
-  ) => void
-}
-
-function OpportunityScanner({
-  onOpportunityFound,
-}: OpportunityScannerProps) {
-  const [tokenIn, setTokenIn] = useState('USDC')
-  const [tokenOut, setTokenOut] = useState('WETH')
-  const [loanAmount, setLoanAmount] = useState('100')
-
-  const [firstDex, setFirstDex] =
-    useState<DexType>('UNISWAP_V3')
-
-  const [secondDex, setSecondDex] =
-    useState<DexType>('V2_COMPATIBLE')
-
-  const [uniFee, setUniFee] = useState('3000')
-
-  const [isScanning, setIsScanning] = useState(false)
-
-  const handleScan = () => {
-    if (!tokenIn || !tokenOut || !loanAmount) {
-      return
+    interface OpportunityScannerProps {
+      onOpportunityFound: (
+        opportunity: ArbitrageOpportunity,
+      ) => void
     }
 
-    setIsScanning(true)
+    function OpportunityScanner({
+        onOpportunityFound,
+      }: OpportunityScannerProps) {
 
-    /*
-     * MOCK MODE
-     *
-     * This is intentionally simulated data.
-     * It is NOT a live blockchain quote.
-     */
+      const {
+        clearOpportunity,
+      } = useArbitrage()
 
-    setTimeout(() => {
-      const opportunity: ArbitrageOpportunity = {
-        tokenIn,
-        tokenOut,
-        loanAmount,
+      const [tokenIn, setTokenIn] = useState('USDC')
+      const [tokenOut, setTokenOut] = useState('WETH')
+      const [loanAmount, setLoanAmount] = useState('100')
 
-        firstDex,
-        secondDex,
+      const [firstDex, setFirstDex] =
+        useState<DexType>('UNISWAP_V3')
 
-        uniFee: Number(uniFee),
+      const [secondDex, setSecondDex] =
+        useState<DexType>('V2_COMPATIBLE')
 
-        amountOut1: '100.42',
-        amountOut2: '101.18',
+      const [uniFee, setUniFee] = useState('3000')
 
-        grossProfit: '1.18',
-        flashLoanFee: '0.05',
-        dexFees: '0.30',
-        estimatedGas: '0.20',
-        slippageCost: '0.10',
-        safetyBuffer: '0.15',
+      const [isScanning, setIsScanning] = useState(false)
 
-        estimatedNetProfit: '0.38',
-        profitPercent: '0.38',
+      const [scanError, setScanError] =
+        useState<string | null>(null)
 
-        minOut1: '100.00',
-        minOut2: '100.60',
-        minProfit: '0.30',
 
-        isProfitable: true,
-        isStale: false,
+       const handleScan = async () => {
+            // ==================================================
+            // Clear previous opportunity
+            // ==================================================
 
-        status: 'OPPORTUNITY_FOUND',
-      }
+            clearOpportunity()
 
-      onOpportunityFound(opportunity)
+            if (!tokenIn || !tokenOut || !loanAmount) {
+              return
+            }
 
-      setIsScanning(false)
-    }, 800)
-  }
+            if (
+              tokenIn !== 'USDC' ||
+              tokenOut !== 'WETH'
+            ) {
+              setScanError(
+                'Phase-1 live scanner supports USDC → WETH → USDC only.',
+              )
+              return
+            }
+
+            const numericLoanAmount =
+              Number(loanAmount)
+
+            if (
+              !Number.isFinite(numericLoanAmount) ||
+              numericLoanAmount <= 0
+            ) {
+              setScanError(
+                'Enter a valid flash loan amount.',
+              )
+              return
+            }
+
+            setIsScanning(true)
+            setScanError(null)
+           
+            try {
+              // ==================================================
+              // Convert user amount to USDC raw units
+              // ==================================================
+
+              const amountIn =
+                parseUnits(
+                  loanAmount,
+                  6,
+                )
+
+              console.log(
+                '========================================',
+              )
+
+              console.log(
+                '[LIVE SCANNER] START',
+              )
+
+              console.log(
+                '[LIVE SCANNER] Route scan:',
+                'V2 → V3 AND V3 → V2',
+              )
+
+              console.log(
+                '[LIVE SCANNER] Loan amount:',
+                loanAmount,
+              )
+
+              console.log(
+                '[LIVE SCANNER] USDC raw amount:',
+                amountIn.toString(),
+              )
+
+              // ==================================================
+              // Common calculation function
+              // ==================================================
+
+              const evaluateRoute = async (
+                routeFirstDex: DexType,
+                routeSecondDex: DexType,
+              ): Promise<ArbitrageOpportunity> => {
+                console.log(
+                  '========================================',
+                )
+
+                console.log(
+                  '[LIVE SCANNER] EVALUATING ROUTE:',
+                  `${routeFirstDex} → ${routeSecondDex}`,
+                )
+
+                let amountOut1Raw: bigint
+                let amountOut2Raw: bigint
+
+                // ==================================================
+                // DEX #1
+                // ==================================================
+
+                if (
+                  routeFirstDex ===
+                  'UNISWAP_V3'
+                ) {
+                  // USDC → WETH
+
+                  amountOut1Raw =
+                    await getUniswapV3Quote(
+                      USDC_ADDRESS,
+                      WETH_ADDRESS,
+                      amountIn,
+                      Number(uniFee),
+                    )
+
+                  console.log(
+                    '[LIVE SCANNER] V3 DEX #1 WETH:',
+                    formatUnits(
+                      amountOut1Raw,
+                      18,
+                    ),
+                  )
+                } else {
+                  // V2 USDC → WETH
+
+                  amountOut1Raw =
+                    await getV2Quote(
+                      amountIn,
+                      [
+                        USDC_ADDRESS,
+                        WETH_ADDRESS,
+                      ],
+                    )
+
+                  console.log(
+                    '[LIVE SCANNER] V2 DEX #1 WETH:',
+                    formatUnits(
+                      amountOut1Raw,
+                      18,
+                    ),
+                  )
+                }
+
+                const amountOut1 =
+                  formatUnits(
+                    amountOut1Raw,
+                    18,
+                  )
+
+                // ==================================================
+                // DEX #2
+                // ==================================================
+
+                if (
+                  routeSecondDex ===
+                  'UNISWAP_V3'
+                ) {
+                  // WETH → USDC
+
+                  amountOut2Raw =
+                    await getUniswapV3Quote(
+                      WETH_ADDRESS,
+                      USDC_ADDRESS,
+                      amountOut1Raw,
+                      Number(uniFee),
+                    )
+
+                  console.log(
+                    '[LIVE SCANNER] V3 DEX #2 USDC:',
+                    formatUnits(
+                      amountOut2Raw,
+                      6,
+                    ),
+                  )
+                } else {
+                  // V2 WETH → USDC
+
+                  amountOut2Raw =
+                    await getV2Quote(
+                      amountOut1Raw,
+                      [
+                        WETH_ADDRESS,
+                        USDC_ADDRESS,
+                      ],
+                    )
+
+                  console.log(
+                    '[LIVE SCANNER] V2 DEX #2 USDC:',
+                    formatUnits(
+                      amountOut2Raw,
+                      6,
+                    ),
+                  )
+                }
+
+                const amountOut2 =
+                  formatUnits(
+                    amountOut2Raw,
+                    6,
+                  )
+
+                // ==================================================
+                // Profit calculation
+                // ==================================================
+
+                const loanAmountNumber =
+                  Number(loanAmount)
+
+                const amountOut2Number =
+                  Number(amountOut2)
+
+                const grossProfit =
+                  amountOut2Number -
+                  loanAmountNumber
+
+                // Aave Sepolia premium = 0.05%
+                const flashLoanFee =
+                  loanAmountNumber * 0.0005
+
+                // Both quote functions already include
+                // their respective DEX swap fees.
+                const dexFees = 0
+
+                // Gas will be estimated before execution.
+                const estimatedGas = 0
+
+                // 1% minimum-output safety threshold.
+                const minOut1Raw =
+                  amountOut1Raw * 99n / 100n
+
+                const minOut2Raw =
+                  amountOut2Raw * 99n / 100n
+
+                const minOut1 =
+                  formatUnits(
+                    minOut1Raw,
+                    18,
+                  )
+
+                const minOut2 =
+                  formatUnits(
+                    minOut2Raw,
+                    6,
+                  )
+
+                const safetyBuffer =
+                  grossProfit > 0
+                    ? grossProfit * 0.10
+                    : 0
+
+                const slippageCost =
+                  Math.max(
+                    amountOut2Number -
+                      Number(minOut2),
+                    0,
+                  )
+
+                const estimatedNetProfit =
+                  grossProfit -
+                  flashLoanFee -
+                  dexFees -
+                  estimatedGas -
+                  slippageCost -
+                  safetyBuffer
+
+                const profitPercent =
+                  loanAmountNumber > 0
+                    ? (
+                        estimatedNetProfit /
+                        loanAmountNumber
+                      ) * 100
+                    : 0
+
+                const minProfit =
+                  Math.max(
+                    flashLoanFee,
+                    0.01,
+                  )
+
+                const isProfitable =
+                  estimatedNetProfit >
+                  minProfit
+
+                console.log(
+                  '[LIVE SCANNER] ROUTE RESULT:',
+                  `${routeFirstDex} → ${routeSecondDex}`,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Gross profit:',
+                  grossProfit,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Flash loan fee:',
+                  flashLoanFee,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Slippage reserve:',
+                  slippageCost,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Safety buffer:',
+                  safetyBuffer,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Estimated net profit:',
+                  estimatedNetProfit,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Minimum profit:',
+                  minProfit,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Profitable:',
+                  isProfitable,
+                )
+
+                return {
+                  tokenIn,
+                  tokenOut,
+                  loanAmount,
+
+                  firstDex:
+                    routeFirstDex,
+
+                  secondDex:
+                    routeSecondDex,
+
+                  // IMPORTANT:
+                  // Keep the fee that was actually used
+                  // for this quote.
+                  uniFee:
+                    Number(uniFee),
+
+                  amountOut1,
+                  amountOut2,
+
+                  grossProfit:
+                    grossProfit.toFixed(6),
+
+                  flashLoanFee:
+                    flashLoanFee.toFixed(6),
+
+                  dexFees:
+                    dexFees.toFixed(6),
+
+                  estimatedGas:
+                    estimatedGas.toFixed(6),
+
+                  slippageCost:
+                    slippageCost.toFixed(6),
+
+                  safetyBuffer:
+                    safetyBuffer.toFixed(6),
+
+                  estimatedNetProfit:
+                    estimatedNetProfit.toFixed(6),
+
+                  profitPercent:
+                    profitPercent.toFixed(4),
+
+                  minOut1,
+                  minOut2,
+
+                  minProfit:
+                    minProfit.toFixed(6),
+
+                  isProfitable,
+                  isStale: false,
+
+                  status:
+                    'OPPORTUNITY_FOUND',
+                }
+              }
+
+              // ==================================================
+              // Evaluate BOTH directions
+              // ==================================================
+
+              console.log(
+                '========================================',
+              )
+
+              console.log(
+                '[LIVE SCANNER] TEST #1:',
+                'V2_COMPATIBLE → UNISWAP_V3',
+              )
+
+              const v2ToV3 =
+                await evaluateRoute(
+                  'V2_COMPATIBLE',
+                  'UNISWAP_V3',
+                )
+
+              console.log(
+                '========================================',
+              )
+
+              console.log(
+                '[LIVE SCANNER] TEST #2:',
+                'UNISWAP_V3 → V2_COMPATIBLE',
+              )
+
+              const v3ToV2 =
+                await evaluateRoute(
+                  'UNISWAP_V3',
+                  'V2_COMPATIBLE',
+                )
+
+              // ==================================================
+              // Select the BEST route
+              // ==================================================
+
+              const candidates =
+                [
+                  v2ToV3,
+                  v3ToV2,
+                ]
+
+              const profitableCandidates =
+                candidates.filter(
+                  (candidate) =>
+                    candidate.isProfitable,
+                )
+
+              console.log(
+                '========================================',
+              )
+
+              console.log(
+                '[LIVE SCANNER] TOTAL CANDIDATES:',
+                candidates.length,
+              )
+
+              console.log(
+                '[LIVE SCANNER] PROFITABLE CANDIDATES:',
+                profitableCandidates.length,
+              )
+
+              // ==================================================
+              // No profitable route
+              // ==================================================
+
+              if (
+                profitableCandidates.length ===
+                0
+              ) {
+                const bestCandidate =
+                  candidates.reduce(
+                    (
+                      best,
+                      current,
+                    ) =>
+                      Number(
+                        current.estimatedNetProfit,
+                      ) >
+                      Number(
+                        best.estimatedNetProfit,
+                      )
+                        ? current
+                        : best,
+                  )
+
+                console.log(
+                  '[LIVE SCANNER] NO PROFITABLE ROUTE',
+                )
+
+                console.log(
+                  '[LIVE SCANNER] BEST ROUTE:',
+                  `${bestCandidate.firstDex} → ${bestCandidate.secondDex}`,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] BEST FEE:',
+                  bestCandidate.uniFee,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] BEST NET PROFIT:',
+                  bestCandidate.estimatedNetProfit,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] No opportunity published.',
+                )
+
+                return
+              }
+
+              // ==================================================
+              // Find highest-profit route
+              // ==================================================
+
+              const bestOpportunity =
+                profitableCandidates.reduce(
+                  (
+                    best,
+                    current,
+                  ) =>
+                    Number(
+                      current.estimatedNetProfit,
+                    ) >
+                    Number(
+                      best.estimatedNetProfit,
+                    )
+                      ? current
+                      : best,
+                )
+
+              console.log(
+                '========================================',
+              )
+
+              console.log(
+                '[LIVE SCANNER] BEST PROFITABLE ROUTE:',
+                `${bestOpportunity.firstDex} → ${bestOpportunity.secondDex}`,
+              )
+
+              console.log(
+                '[LIVE SCANNER] BEST FEE:',
+                bestOpportunity.uniFee,
+              )
+
+              console.log(
+                '[LIVE SCANNER] BEST NET PROFIT:',
+                bestOpportunity.estimatedNetProfit,
+              )
+
+              console.log(
+                '[LIVE SCANNER] PROFITABLE:',
+                bestOpportunity.isProfitable,
+              )
+
+              // ==================================================
+              // Synchronize UI with BEST route
+              // ==================================================
+
+              setFirstDex(
+                bestOpportunity.firstDex,
+              )
+
+              setSecondDex(
+                bestOpportunity.secondDex,
+              )
+
+              // Keep the fee that produced the
+              // selected opportunity.
+              setUniFee(
+                String(
+                  bestOpportunity.uniFee,
+                ),
+              )
+
+              console.log(
+                '[LIVE SCANNER] SELECTED ROUTE:',
+                `${bestOpportunity.firstDex} → ${bestOpportunity.secondDex}`,
+              )
+
+              console.log(
+                '[LIVE SCANNER] SELECTED FEE:',
+                bestOpportunity.uniFee,
+              )
+
+              // ==================================================
+              // Publish ONLY the best profitable opportunity
+              // ==================================================
+
+              onOpportunityFound(
+                bestOpportunity,
+              )
+
+              console.log(
+                '[LIVE SCANNER] OPPORTUNITY PUBLISHED',
+              )
+
+              console.log(
+                '========================================',
+              )
+
+            } catch (error: any) {
+              console.error(
+                '========================================',
+              )
+
+              console.error(
+                '[LIVE SCANNER] FAILED',
+              )
+
+              console.error(
+                '[LIVE SCANNER] Error:',
+                error,
+              )
+
+              console.error(
+                '[LIVE SCANNER] Message:',
+                error?.message,
+              )
+
+              console.error(
+                '[LIVE SCANNER] Reason:',
+                error?.reason,
+              )
+
+              console.error(
+                '[LIVE SCANNER] Short message:',
+                error?.shortMessage,
+              )
+
+              console.error(
+                '[LIVE SCANNER] Data:',
+                error?.data,
+              )
+
+              console.error(
+                '========================================',
+              )
+
+              setScanError(
+                error?.shortMessage ||
+                error?.reason ||
+                error?.message ||
+                'Live DEX quote failed.',
+              )
+
+            } finally {
+              setIsScanning(false)
+            }
+          }
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl shadow-black/10">
@@ -99,11 +703,17 @@ function OpportunityScanner({
           opportunities.
         </p>
 
-        {/* Mock Mode */}
-        <div className="mt-4 inline-flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          MOCK QUOTE MODE
+        {/* Live Quote Mode */}
+        <div className="mt-4 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs text-emerald-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          LIVE SEPOLIA QUOTE MODE
         </div>
+
+        {scanError && (
+          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            {scanError}
+          </div>
+        )}
       </div>
 
       {/* Input Grid */}
