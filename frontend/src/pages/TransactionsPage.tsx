@@ -102,6 +102,31 @@ function formatAddress(
   return `${address.slice(0, 8)}...${address.slice(-6)}`
 }
 
+// ======================================================
+// Open Transaction On Sepolia Explorer
+// ======================================================
+
+function openTransactionOnExplorer(
+  hash: string,
+): void {
+
+  if (
+    !hash ||
+    !hash.startsWith('0x')
+  ) {
+    return
+  }
+
+  const explorerUrl =
+    `https://sepolia.etherscan.io/tx/${hash}`
+
+  window.open(
+    explorerUrl,
+    '_blank',
+    'noopener,noreferrer',
+  )
+}
+
 
 // ======================================================
 // Format Time
@@ -850,6 +875,8 @@ function TransactionsPage() {
       0,
     )
 
+    
+
 
   // ====================================================
   // Render
@@ -1068,16 +1095,23 @@ function TransactionsPage() {
                     <td className="px-6 py-5">
 
                       <button
-                        type="button"
-                        className="font-mono text-sm text-emerald-400 hover:text-emerald-300"
-                        title={
-                          transaction.hash
-                        }
-                      >
-                        {formatAddress(
-                          transaction.hash,
-                        )}
-                      </button>
+                          type="button"
+                          onClick={() =>
+                            openTransactionOnExplorer(
+                              transaction.hash,
+                            )
+                          }
+                          className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
+                          title="View transaction on Sepolia Etherscan"
+                        >
+                          {formatAddress(
+                            transaction.hash,
+                          )}
+                        </button>
+
+                        <p className="mt-1 text-xs text-slate-600">
+                          View on Sepolia
+                        </p>
 
                     </td>
 
@@ -1202,12 +1236,15 @@ function TransactionsPage() {
                 <div className="flex items-center justify-between gap-3">
 
                   <button
-                    type="button"
-                    className="font-mono text-sm text-emerald-400"
-                    title={
-                      transaction.hash
-                    }
-                  >
+                      type="button"
+                      onClick={() =>
+                        openTransactionOnExplorer(
+                          transaction.hash,
+                        )
+                      }
+                      className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
+                      title="View transaction on Sepolia Etherscan"
+                    >
                     {formatAddress(
                       transaction.hash,
                     )}
