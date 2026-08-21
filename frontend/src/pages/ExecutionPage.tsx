@@ -12,6 +12,7 @@ import {
   AbiCoder,
   isAddress,
   parseUnits,
+  formatUnits,
 } from 'ethers'
 
 import { useNavigate } from 'react-router-dom'
@@ -24,6 +25,7 @@ import {
   getConnectedWalletAddress,
   getExecutorOwner,
   getExecutorPaused,
+  getFlashLoanTransactionResult,
 } from '../services/blockchain'
 
 import {
@@ -370,6 +372,21 @@ function ExecutionPage() {
     executionError,
     setExecutionError,
   ] = useState<string | null>(null)
+
+  // ====================================================
+  // Flash Loan Execution Result
+  // ====================================================
+
+  const [
+    flashLoanResult,
+    setFlashLoanResult,
+  ] = useState<
+    Awaited<
+      ReturnType<
+        typeof getFlashLoanTransactionResult
+      >
+    > | null
+  >(null)
 
 
   const [
@@ -1138,7 +1155,7 @@ function ExecutionPage() {
     }
 
 
-      // ====================================================
+        // ====================================================
       // Transaction Confirmed
       // ====================================================
 
@@ -1148,6 +1165,45 @@ function ExecutionPage() {
           'CONFIRMED',
         )
 
+        // --------------------------------------------------
+        // Decode completed flash-loan transaction
+        // --------------------------------------------------
+
+        if (transactionHash) {
+
+          try {
+
+            console.log(
+              '[EXECUTION RESULT] Loading transaction result...',
+            )
+
+            const result =
+              await getFlashLoanTransactionResult(
+                transactionHash,
+              )
+
+            setFlashLoanResult(
+              result,
+            )
+
+            console.log(
+              '[EXECUTION RESULT] Transaction result loaded:',
+              result,
+            )
+
+          } catch (error) {
+
+            console.error(
+              '[EXECUTION RESULT] Failed to load transaction result:',
+              error,
+            )
+
+            setFlashLoanResult(
+              null,
+            )
+
+          }
+        }
 
         // --------------------------------------------------
         // Refresh Executor Status
@@ -1165,9 +1221,9 @@ function ExecutionPage() {
             getExecutorPaused(),
           ])
 
-
-          setWalletAddress(wallet)
-
+          setWalletAddress(
+            wallet,
+          )
 
           setIsOwner(
             wallet !== null &&
@@ -1175,8 +1231,9 @@ function ExecutionPage() {
               owner.toLowerCase(),
           )
 
-
-          setIsPaused(paused)
+          setIsPaused(
+            paused,
+          )
 
         } catch (error) {
 
@@ -1561,61 +1618,377 @@ function ExecutionPage() {
           Transaction Status
           ================================================== */}
 
-      {transactionHash && (
+     {transactionHash && (
 
-        <section className="mt-6">
+  <section className="mt-6">
 
-          <TransactionStatus
-            transactionHash={transactionHash}
-            onConfirmed={
-              handleTransactionConfirmed
-            }
-          />
+    <TransactionStatus
+      transactionHash={transactionHash}
+      onConfirmed={
+        handleTransactionConfirmed
+      }
+    />
 
-        </section>
-      )}
-
-
-      {/* ==================================================
-          Action Buttons
-          ================================================== */}
-
-      <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-
-        <button
-          type="button"
-          onClick={() => navigate('/opportunity')}
-          className="rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-900 hover:text-white"
-        >
-          Back to Opportunity
-        </button>
+  </section>
+)}
 
 
-        <button
-          type="button"
-          disabled={executionDisabled}
-          onClick={() =>
-            setShowConfirmation(true)
-          }
-          className="rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {executionState ===
-            'WAITING_FOR_WALLET'
-            ? 'Waiting for MetaMask...'
-            : executionState ===
-                'TRANSACTION_PENDING'
-              ? 'Transaction Pending...'
-              : executionState ===
-                  'CONFIRMED'
-                ? 'Flash Loan Completed ✓'
-                : executionState ===
-                    'FAILED'
-                  ? 'Retry Execution'
-                  : 'Confirm & Execute'}
-        </button>
+{/* ==================================================
+    Flash Loan Execution Result
+    ================================================== */}
+
+{executionState ===
+  'CONFIRMED' &&
+  flashLoanResult && (
+
+  <section className="mt-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
+
+    {/* ==================================================
+        Result Header
+        ================================================== */}
+
+    <div className="flex items-center justify-between gap-4">
+
+      <div>
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+          Execution Result
+        </p>
+
+        <h2 className="mt-1 text-2xl font-bold text-white">
+          Flash Loan Completed ✓
+        </h2>
 
       </div>
 
+      <div className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-400">
+        SUCCESS
+      </div>
+
+    </div>
+
+
+    {/* ==================================================
+        Flash Loan Details
+        ================================================== */}
+
+    <div className="mt-6">
+
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Flash Loan
+      </p>
+
+      <div className="mt-3 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Borrowed
+          </span>
+
+          <span className="text-sm font-semibold text-white">
+            {formatUnits(
+              flashLoanResult.flashLoanAmount ?? 0n,
+              6,
+            )}{' '}
+            USDC
+          </span>
+
+        </div>
+
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Aave Premium
+          </span>
+
+          <span className="text-sm font-semibold text-white">
+            {formatUnits(
+              flashLoanResult.flashLoanPremium ?? 0n,
+              6,
+            )}{' '}
+            USDC
+          </span>
+
+        </div>
+
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Required Repayment
+          </span>
+
+          <span className="text-sm font-semibold text-white">
+            {formatUnits(
+              (flashLoanResult.flashLoanAmount ?? 0n) +
+                (flashLoanResult.flashLoanPremium ?? 0n),
+              6,
+            )}{' '}
+            USDC
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+        {/* ==================================================
+          Swap Results
+          ================================================== */}
+
+      <div className="mt-6">
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Arbitrage Swaps
+        </p>
+
+        <div className="mt-3 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+
+          <div className="flex items-center justify-between gap-4">
+
+            <span className="text-sm text-slate-400">
+              Swap #1
+            </span>
+
+            <span className="text-right text-sm font-semibold text-white">
+
+              {formatUnits(
+                flashLoanResult.swap1AmountIn ?? 0n,
+                6,
+              )}{' '}
+              USDC
+
+              <span className="mx-2 text-slate-600">
+                →
+              </span>
+
+              {formatUnits(
+                flashLoanResult.swap1AmountOut ?? 0n,
+                18,
+              )}{' '}
+              WETH
+
+            </span>
+
+          </div>
+
+
+          <div className="flex items-center justify-between gap-4">
+
+            <span className="text-sm text-slate-400">
+              Swap #2
+            </span>
+
+            <span className="text-right text-sm font-semibold text-white">
+
+              {formatUnits(
+                flashLoanResult.swap2AmountIn ?? 0n,
+                18,
+              )}{' '}
+              WETH
+
+              <span className="mx-2 text-slate-600">
+                →
+              </span>
+
+              {formatUnits(
+                flashLoanResult.swap2AmountOut ?? 0n,
+                6,
+              )}{' '}
+              USDC
+
+            </span>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* ==================================================
+          Profit Result
+          ================================================== */}
+
+      <div className="mt-6">
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Arbitrage Result
+        </p>
+
+        <div className="mt-3 space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+
+          <div className="flex items-center justify-between gap-4">
+
+            <span className="text-sm text-slate-400">
+              Arbitrage Profit
+            </span>
+
+            <span className="text-sm font-bold text-emerald-400">
+              {formatUnits(
+                flashLoanResult.arbitrageProfit ?? 0n,
+                6,
+              )}{' '}
+              USDC
+            </span>
+
+          </div>
+
+
+          <div className="flex items-center justify-between gap-4">
+
+            <span className="text-sm text-slate-400">
+              Executor USDC
+            </span>
+
+            <span className="text-sm font-semibold text-emerald-400">
+              {flashLoanResult.executorUSDCBalance ?? '0'}{' '}
+              USDC
+            </span>
+
+          </div>
+
+
+          <div className="flex items-center justify-between gap-4">
+
+            <span className="text-sm text-slate-400">
+              Executor WETH
+            </span>
+
+            <span className="text-sm font-semibold text-emerald-400">
+              {flashLoanResult.executorWETHBalance ?? '0'}{' '}
+              WETH
+            </span>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+    {/* ==================================================
+        Transaction Details
+        ================================================== */}
+
+    <div className="mt-6">
+
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Transaction Details
+      </p>
+
+      <div className="mt-3 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Gas Used
+          </span>
+
+          <span className="text-sm font-semibold text-white">
+            {flashLoanResult.gasUsed.toString()}
+          </span>
+
+        </div>
+
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Gas Cost
+          </span>
+
+          <span className="text-sm font-semibold text-amber-400">
+            {formatUnits(
+              flashLoanResult.gasCostWei,
+              18,
+            )}{' '}
+            ETH
+          </span>
+
+        </div>
+
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Operation ID
+          </span>
+
+          <span className="text-sm font-semibold text-white">
+            {(
+          flashLoanResult.operationId ?? 0n
+        ).toString()}
+          </span>
+
+        </div>
+
+
+        <div className="flex items-center justify-between gap-4">
+
+          <span className="text-sm text-slate-400">
+            Operation Success
+          </span>
+
+          <span className="text-sm font-semibold text-emerald-400">
+            {flashLoanResult.operationSuccess
+              ? 'YES'
+              : 'NO'}
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+)}
+
+
+{/* ==================================================
+    Action Buttons
+    ================================================== */}
+
+<div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+
+  <button
+    type="button"
+    onClick={() => navigate('/opportunity')}
+    className="rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-900 hover:text-white"
+  >
+    Back to Opportunity
+  </button>
+
+
+  <button
+    type="button"
+    disabled={executionDisabled}
+    onClick={() =>
+      setShowConfirmation(true)
+    }
+    className="rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+  >
+    {executionState ===
+      'WAITING_FOR_WALLET'
+      ? 'Waiting for MetaMask...'
+      : executionState ===
+          'TRANSACTION_PENDING'
+        ? 'Transaction Pending...'
+        : executionState ===
+            'CONFIRMED'
+          ? 'Flash Loan Completed ✓'
+          : executionState ===
+              'FAILED'
+            ? 'Retry Execution'
+            : 'Confirm & Execute'}
+  </button>
+
+</div>
 
       {/* ==================================================
           Confirmation
