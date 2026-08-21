@@ -16,13 +16,18 @@ const TRANSACTION_HISTORY_EVENT =
 export type TransactionHistoryItem = {
   hash: string
   status: 'SUCCESS' | 'FAILED'
-  type: 'ARBITRAGE' | 'ETH_WITHDRAWAL'
+  type:
+    | 'ARBITRAGE'
+    | 'ETH_DEPOSIT'
+    | 'ETH_WITHDRAWAL'
   pair: string
   amount: string
   grossProfit: string
   netProfit: string
   gas: string
   time: string
+  from?: string
+  to?: string
 }
 
 // ======================================================

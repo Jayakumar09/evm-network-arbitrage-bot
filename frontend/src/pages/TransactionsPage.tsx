@@ -1,27 +1,33 @@
-import { useEffect, useState } from 'react'
-import { formatEther } from 'ethers'
+import {
+  useEffect,
+  useState,
+} from 'react'
+
+import {
+  formatEther,
+} from 'ethers'
+
+import {
+  getStoredTransactions,
+  subscribeToTransactionUpdates,
+} from '../services/transactionHistory'
+
+import type {
+  TransactionHistoryItem,
+} from '../services/transactionHistory'
 
 import {
   EXECUTOR_CONTRACT_ADDRESS,
 } from '../config/contracts'
 
+
 // ======================================================
 // Transaction Type
 // ======================================================
 
-type TransactionItem = {
-  hash: string
-  status: 'SUCCESS' | 'FAILED'
-  type: 'ARBITRAGE' | 'ETH_DEPOSIT'
-  pair: string
-  amount: string
-  grossProfit: string
-  netProfit: string
-  gas: string
-  time: string
-  from?: string
-  to?: string
-}
+type TransactionItem =
+  TransactionHistoryItem
+
 
 // ======================================================
 // Blockscout Transaction Type
@@ -33,13 +39,16 @@ type BlockscoutTransaction = {
   block_number: number
   status: string
   value: string
+
   from?: {
     hash: string
   }
+
   to?: {
     hash: string
   } | null
 }
+
 
 // ======================================================
 // Blockscout Response
@@ -49,42 +58,14 @@ type BlockscoutResponse = {
   items?: BlockscoutTransaction[]
 }
 
-// ======================================================
-// Static Arbitrage Transactions
-// ======================================================
-
-const STATIC_ARBITRAGE_TRANSACTIONS:
-  TransactionItem[] = [
-    {
-      hash: '0x8f3a...c921',
-      status: 'SUCCESS',
-      type: 'ARBITRAGE',
-      pair: 'USDC → WETH → USDC',
-      amount: '100 USDC',
-      grossProfit: '$1.18',
-      netProfit: '$0.38',
-      gas: '$0.20',
-      time: 'Today, 08:42 PM',
-    },
-    {
-      hash: '0x71bc...a442',
-      status: 'SUCCESS',
-      type: 'ARBITRAGE',
-      pair: 'USDC → WETH → USDC',
-      amount: '250 USDC',
-      grossProfit: '$2.95',
-      netProfit: '$1.72',
-      gas: '$0.24',
-      time: 'Today, 07:18 PM',
-    },
-  ]
 
 // ======================================================
 // Storage
 // ======================================================
 
-const ETH_DEPOSIT_STORAGE_KEY =
-  'executor_eth_deposit_transactions'
+const ETH_WITHDRAWAL_STORAGE_KEY =
+  'executor_eth_withdrawal_transactions'
+
 
 // ======================================================
 // Blockscout Sepolia API
@@ -93,12 +74,14 @@ const ETH_DEPOSIT_STORAGE_KEY =
 const BLOCKSCOUT_API_URL =
   'https://eth-sepolia.blockscout.com/api/v2/addresses'
 
+
 // ======================================================
 // Automatic Refresh Interval
 // ======================================================
 
 const TRANSACTION_REFRESH_INTERVAL =
   10000
+
 
 // ======================================================
 // Format Address
@@ -107,6 +90,7 @@ const TRANSACTION_REFRESH_INTERVAL =
 function formatAddress(
   address?: string,
 ): string {
+
   if (!address) {
     return '—'
   }
@@ -118,6 +102,7 @@ function formatAddress(
   return `${address.slice(0, 8)}...${address.slice(-6)}`
 }
 
+
 // ======================================================
 // Format Time
 // ======================================================
@@ -125,21 +110,25 @@ function formatAddress(
 function formatTransactionTime(
   timestamp: string,
 ): string {
+
   return new Date(
     timestamp,
   ).toLocaleString()
 }
 
+
 // ======================================================
-// Read Stored ETH Deposits
+// Read Stored ETH Withdrawals
 // ======================================================
 
-function getStoredEthDeposits():
+function getStoredEthWithdrawals():
   TransactionItem[] {
+
   try {
+
     const stored =
       localStorage.getItem(
-        ETH_DEPOSIT_STORAGE_KEY,
+        ETH_WITHDRAWAL_STORAGE_KEY,
       )
 
     if (!stored) {
@@ -154,32 +143,46 @@ function getStoredEthDeposits():
     }
 
     return parsed
+
   } catch {
+
     return []
   }
 }
 
+
 // ======================================================
-// Save ETH Deposits
+// Save ETH Withdrawals
 // ======================================================
 
-function saveEthDeposits(
+function saveEthWithdrawals(
   transactions: TransactionItem[],
 ): void {
+
   try {
+
     localStorage.setItem(
-      ETH_DEPOSIT_STORAGE_KEY,
+      ETH_WITHDRAWAL_STORAGE_KEY,
       JSON.stringify(
         transactions,
       ),
     )
+
   } catch {
+
     // Storage failure should not stop the page.
+
   }
 }
 
+
 // ======================================================
 // Read Executor ETH Transactions
+//
+// Detect native ETH transactions SENT FROM the Executor.
+// These represent ETH withdrawals / management activity.
+//
+// Normal contract calls with value = 0 are ignored.
 // ======================================================
 
 async function getExecutorTransactions():
@@ -192,6 +195,7 @@ async function getExecutorTransactions():
     await fetch(url)
 
   if (!response.ok) {
+
     throw new Error(
       `Transaction history request failed: ${response.status}`,
     )
@@ -206,19 +210,24 @@ async function getExecutorTransactions():
       ? data.items
       : []
 
-  const deposits:
+  const withdrawals:
     TransactionItem[] = []
 
   const executorAddress =
     EXECUTOR_CONTRACT_ADDRESS.toLowerCase()
 
+
   // ----------------------------------------------------
-  // Find native ETH deposits to Executor
+  // Find native ETH withdrawals FROM Executor
   // ----------------------------------------------------
 
   for (
     const transaction of items
   ) {
+
+    // ----------------------------------------------
+    // Only successful transactions
+    // ----------------------------------------------
 
     if (
       transaction.status !==
@@ -227,6 +236,11 @@ async function getExecutorTransactions():
       continue
     }
 
+
+    // ----------------------------------------------
+    // Ignore zero-value transactions
+    // ----------------------------------------------
+
     if (
       !transaction.value ||
       transaction.value === '0'
@@ -234,15 +248,22 @@ async function getExecutorTransactions():
       continue
     }
 
-    const toAddress =
-      transaction.to?.hash?.toLowerCase()
+
+    const fromAddress =
+      transaction.from?.hash?.toLowerCase()
+
+
+    // ----------------------------------------------
+    // Must originate from Executor
+    // ----------------------------------------------
 
     if (
-      toAddress !==
+      fromAddress !==
       executorAddress
     ) {
       continue
     }
+
 
     const ethAmount =
       formatEther(
@@ -251,54 +272,65 @@ async function getExecutorTransactions():
         ),
       )
 
-    deposits.push({
+
+    withdrawals.push({
+
       hash:
         transaction.hash,
+
       status:
         'SUCCESS',
+
       type:
-        'ETH_DEPOSIT',
+        'ETH_WITHDRAWAL',
+
       pair:
-        'ETH Deposit → Executor',
+        'Executor → ETH Withdrawal',
+
       amount:
-        `${Number(ethAmount).toFixed(6)} ETH`,
+        `${ethAmount} ETH`,
+
       grossProfit:
         '—',
+
       netProfit:
         '—',
+
       gas:
         '—',
+
       time:
         formatTransactionTime(
           transaction.timestamp,
         ),
-      from:
-        transaction.from?.hash,
-      to:
-        EXECUTOR_CONTRACT_ADDRESS,
+
     })
   }
 
-  return deposits
+
+  return withdrawals
 }
 
+
 // ======================================================
-// Merge And Deduplicate Transactions
+// Merge And Deduplicate ETH Withdrawals
 // ======================================================
 
-function mergeEthDeposits(
-  blockchainDeposits:
+function mergeEthWithdrawals(
+  blockchainWithdrawals:
     TransactionItem[],
 ): TransactionItem[] {
 
-  const storedDeposits =
-    getStoredEthDeposits()
+  const storedWithdrawals =
+    getStoredEthWithdrawals()
 
-  const allDeposits =
+
+  const allWithdrawals =
     [
-      ...blockchainDeposits,
-      ...storedDeposits,
+      ...blockchainWithdrawals,
+      ...storedWithdrawals,
     ]
+
 
   const uniqueTransactions =
     new Map<
@@ -306,18 +338,21 @@ function mergeEthDeposits(
       TransactionItem
     >()
 
+
   for (
-    const transaction of allDeposits
+    const transaction of allWithdrawals
   ) {
 
     const key =
       transaction.hash.toLowerCase()
+
 
     if (
       !uniqueTransactions.has(
         key,
       )
     ) {
+
       uniqueTransactions.set(
         key,
         transaction,
@@ -325,10 +360,12 @@ function mergeEthDeposits(
     }
   }
 
+
   const merged =
     Array.from(
       uniqueTransactions.values(),
     )
+
 
   // ----------------------------------------------------
   // Newest first
@@ -347,12 +384,15 @@ function mergeEthDeposits(
       ).getTime(),
   )
 
-  saveEthDeposits(
+
+  saveEthWithdrawals(
     merged,
   )
 
+
   return merged
 }
+
 
 // ======================================================
 // Transactions Page
@@ -360,23 +400,51 @@ function mergeEthDeposits(
 
 function TransactionsPage() {
 
+  // ====================================================
+  // Stored Arbitrage Transactions
+  // ====================================================
+
   const [
-    ethDeposits,
-    setEthDeposits,
+    arbitrageTransactions,
+    setArbitrageTransactions,
   ] = useState<TransactionItem[]>(
     () =>
-      getStoredEthDeposits(),
+      getStoredTransactions(),
   )
+
+
+  // ====================================================
+  // Executor ETH Withdrawals
+  // ====================================================
+
+  const [
+    ethWithdrawals,
+    setEthWithdrawals,
+  ] = useState<TransactionItem[]>(
+    () =>
+      getStoredEthWithdrawals(),
+  )
+
+
+  // ====================================================
+  // Loading State
+  // ====================================================
 
   const [
     loading,
     setLoading,
   ] = useState(true)
 
+
+  // ====================================================
+  // Error State
+  // ====================================================
+
   const [
     error,
     setError,
   ] = useState('')
+
 
   // ====================================================
   // Automatic Transaction Refresh
@@ -385,12 +453,43 @@ function TransactionsPage() {
   useEffect(() => {
 
     let mounted = true
+
     let refreshRunning = false
+
+
+    // ==================================================
+    // Refresh Stored Arbitrage History
+    // ==================================================
+
+    const refreshStoredTransactions =
+      () => {
+
+        if (!mounted) {
+          return
+        }
+
+        const storedTransactions =
+          getStoredTransactions()
+
+        console.log(
+          '[TRANSACTION PAGE] Stored arbitrage transactions:',
+          storedTransactions,
+        )
+
+        setArbitrageTransactions(
+          storedTransactions,
+        )
+      }
+
+
+    // ==================================================
+    // Refresh All Transactions
+    // ==================================================
 
     async function refreshTransactions() {
 
       // ------------------------------------------------
-      // Prevent overlapping requests
+      // Prevent overlapping refresh calls
       // ------------------------------------------------
 
       if (
@@ -399,33 +498,60 @@ function TransactionsPage() {
         return
       }
 
-      refreshRunning = true
+      refreshRunning =
+        true
+
 
       try {
 
-        const blockchainDeposits =
+        // ----------------------------------------------
+        // Refresh arbitrage history
+        // ----------------------------------------------
+
+        refreshStoredTransactions()
+
+
+        // ----------------------------------------------
+        // Refresh Executor ETH withdrawals
+        // ----------------------------------------------
+
+        const blockchainWithdrawals =
           await getExecutorTransactions()
+
 
         if (!mounted) {
           return
         }
 
-        const mergedDeposits =
-          mergeEthDeposits(
-            blockchainDeposits,
+
+        const mergedWithdrawals =
+          mergeEthWithdrawals(
+            blockchainWithdrawals,
           )
 
-        setEthDeposits(
-          mergedDeposits,
+
+        setEthWithdrawals(
+          mergedWithdrawals,
         )
+
 
         setError('')
 
-      } catch (refreshError) {
+
+      } catch (
+        refreshError
+      ) {
 
         if (!mounted) {
           return
         }
+
+
+        console.error(
+          '[TRANSACTION PAGE] Refresh failed:',
+          refreshError,
+        )
+
 
         setError(
           refreshError instanceof Error
@@ -433,34 +559,77 @@ function TransactionsPage() {
             : 'Unable to load Executor transactions.',
         )
 
+
         // ----------------------------------------------
-        // Keep previously loaded transactions
+        // Keep stored data available
         // ----------------------------------------------
 
-        setEthDeposits(
-          getStoredEthDeposits(),
+        setArbitrageTransactions(
+          getStoredTransactions(),
         )
+
+
+        setEthWithdrawals(
+          getStoredEthWithdrawals(),
+        )
+
 
       } finally {
 
         refreshRunning =
           false
 
+
         if (mounted) {
-          setLoading(false)
+
+          setLoading(
+            false,
+          )
         }
       }
     }
 
-    // --------------------------------------------------
+
+    // ==================================================
     // Initial Refresh
-    // --------------------------------------------------
+    // ==================================================
 
     refreshTransactions()
 
-    // --------------------------------------------------
+
+    // ==================================================
+    // New Arbitrage Transaction Listener
+    //
+    // ExecutionPage:
+    //
+    // saveTransaction()
+    //        ↓
+    // localStorage
+    //        ↓
+    // executorTransactionUpdated
+    //        ↓
+    // this callback
+    //        ↓
+    // UI refresh
+    // ==================================================
+
+    const unsubscribe =
+      subscribeToTransactionUpdates(
+        () => {
+
+          console.log(
+            '[TRANSACTION PAGE] New transaction update received.',
+          )
+
+          refreshStoredTransactions()
+
+        },
+      )
+
+
+    // ==================================================
     // Automatic Refresh Every 10 Seconds
-    // --------------------------------------------------
+    // ==================================================
 
     const refreshTimer =
       window.setInterval(
@@ -468,23 +637,27 @@ function TransactionsPage() {
         TRANSACTION_REFRESH_INTERVAL,
       )
 
-    // --------------------------------------------------
-    // Refresh When Browser Gets Focus
-    // --------------------------------------------------
+
+    // ==================================================
+    // Browser Focus
+    // ==================================================
 
     const handleWindowFocus =
       () => {
+
         refreshTransactions()
       }
+
 
     window.addEventListener(
       'focus',
       handleWindowFocus,
     )
 
-    // --------------------------------------------------
-    // Refresh When Page Becomes Visible
-    // --------------------------------------------------
+
+    // ==================================================
+    // Page Visibility
+    // ==================================================
 
     const handleVisibilityChange =
       () => {
@@ -493,31 +666,41 @@ function TransactionsPage() {
           document.visibilityState ===
           'visible'
         ) {
+
           refreshTransactions()
         }
       }
+
 
     document.addEventListener(
       'visibilitychange',
       handleVisibilityChange,
     )
 
-    // --------------------------------------------------
+
+    // ==================================================
     // Cleanup
-    // --------------------------------------------------
+    // ==================================================
 
     return () => {
 
-      mounted = false
+      mounted =
+        false
+
 
       window.clearInterval(
         refreshTimer,
       )
 
+
+      unsubscribe()
+
+
       window.removeEventListener(
         'focus',
         handleWindowFocus,
       )
+
 
       document.removeEventListener(
         'visibilitychange',
@@ -527,25 +710,89 @@ function TransactionsPage() {
 
   }, [])
 
+
   // ====================================================
   // Combine Transactions
   // ====================================================
 
-  const transactions:
-    TransactionItem[] = [
-      ...ethDeposits,
-      ...STATIC_ARBITRAGE_TRANSACTIONS,
+  const transactions =
+    [
+      ...arbitrageTransactions,
+      ...ethWithdrawals,
     ]
+
+
+  // ====================================================
+  // Deduplicate By Transaction Hash
+  // ====================================================
+
+  const uniqueTransactions =
+    new Map<
+      string,
+      TransactionItem
+    >()
+
+
+  for (
+    const transaction of transactions
+  ) {
+
+    const key =
+      transaction.hash.toLowerCase()
+
+
+    if (
+      !uniqueTransactions.has(
+        key,
+      )
+    ) {
+
+      uniqueTransactions.set(
+        key,
+        transaction,
+      )
+    }
+  }
+
+
+  // ====================================================
+  // Final Transaction List
+  // ====================================================
+
+  const mergedTransactions =
+    Array.from(
+      uniqueTransactions.values(),
+    )
+
+
+  // ====================================================
+  // Newest First
+  // ====================================================
+
+  mergedTransactions.sort(
+    (
+      transactionA,
+      transactionB,
+    ) =>
+      new Date(
+        transactionB.time,
+      ).getTime() -
+      new Date(
+        transactionA.time,
+      ).getTime(),
+  )
+
 
   // ====================================================
   // Summary
   // ====================================================
 
   const totalTransactions =
-    transactions.length
+    mergedTransactions.length
+
 
   const successfulTransactions =
-    transactions.filter(
+    mergedTransactions.filter(
       (
         transaction,
       ) =>
@@ -553,12 +800,16 @@ function TransactionsPage() {
         'SUCCESS',
     ).length
 
-  // ----------------------------------------------------
-  // Only arbitrage transactions count toward profit
-  // ----------------------------------------------------
+
+  // ====================================================
+  // Total Net Profit
+  //
+  // Only ARBITRAGE transactions count.
+  // ETH withdrawals do not affect arbitrage profit.
+  // ====================================================
 
   const totalNetProfit =
-    transactions.reduce(
+    mergedTransactions.reduce(
       (
         total,
         transaction,
@@ -568,8 +819,10 @@ function TransactionsPage() {
           transaction.type !==
           'ARBITRAGE'
         ) {
+
           return total
         }
+
 
         const value =
           Number(
@@ -580,13 +833,16 @@ function TransactionsPage() {
               ),
           )
 
+
         if (
           Number.isNaN(
             value,
           )
         ) {
+
           return total
         }
+
 
         return total + value
 
@@ -594,10 +850,18 @@ function TransactionsPage() {
       0,
     )
 
+
+  // ====================================================
+  // Render
+  // ====================================================
+
   return (
+
     <main className="mx-auto max-w-7xl px-6 py-10">
 
-      {/* Page Header */}
+      {/* ==================================================
+          Page Header
+          ================================================== */}
 
       <div className="mb-8">
 
@@ -605,9 +869,11 @@ function TransactionsPage() {
           FLASH LOAN ARBITRAGE
         </p>
 
+
         <h1 className="text-4xl font-bold text-white">
           Transactions
         </h1>
+
 
         <p className="mt-3 text-slate-400">
           View previous arbitrage transactions and Executor management activity.
@@ -615,19 +881,30 @@ function TransactionsPage() {
 
       </div>
 
-      {/* Error */}
+
+      {/* ==================================================
+          Error
+          ================================================== */}
 
       {error && (
+
         <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-4 text-sm text-red-400">
+
           Transaction history refresh failed:
           {' '}
           {error}
+
         </div>
       )}
 
-      {/* Summary */}
+
+      {/* ==================================================
+          Summary
+          ================================================== */}
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
+
+        {/* Total Transactions */}
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
@@ -635,13 +912,19 @@ function TransactionsPage() {
             Total Transactions
           </p>
 
+
           <p className="mt-2 text-2xl font-semibold text-white">
+
             {loading
               ? '...'
               : totalTransactions}
+
           </p>
 
         </div>
+
+
+        {/* Successful */}
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
@@ -649,13 +932,19 @@ function TransactionsPage() {
             Successful
           </p>
 
+
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
+
             {loading
               ? '...'
               : successfulTransactions}
+
           </p>
 
         </div>
+
+
+        {/* Net Profit */}
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
@@ -663,17 +952,22 @@ function TransactionsPage() {
             Total Net Profit
           </p>
 
+
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
             ${totalNetProfit.toFixed(2)}
           </p>
 
         </div>
 
+
+        {/* Network */}
+
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Network
           </p>
+
 
           <p className="mt-2 text-lg font-semibold text-white">
             Ethereum Sepolia
@@ -683,9 +977,14 @@ function TransactionsPage() {
 
       </div>
 
-      {/* Transaction History */}
+
+      {/* ==================================================
+          Transaction History
+          ================================================== */}
 
       <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
+
+        {/* Header */}
 
         <div className="border-b border-slate-800 px-6 py-5">
 
@@ -693,13 +992,17 @@ function TransactionsPage() {
             Transaction History
           </h2>
 
+
           <p className="mt-1 text-sm text-slate-400">
             Arbitrage execution results and Executor management transactions.
           </p>
 
         </div>
 
-        {/* Desktop Table */}
+
+        {/* ==================================================
+            Desktop Table
+            ================================================== */}
 
         <div className="hidden overflow-x-auto md:block">
 
@@ -745,9 +1048,10 @@ function TransactionsPage() {
 
             </thead>
 
+
             <tbody>
 
-              {transactions.map(
+              {mergedTransactions.map(
                 (
                   transaction,
                 ) => (
@@ -759,79 +1063,79 @@ function TransactionsPage() {
                     className="border-b border-slate-800/70 last:border-0 hover:bg-slate-900/30"
                   >
 
+                    {/* Transaction */}
+
                     <td className="px-6 py-5">
 
-                      <div>
-
-                        <button
-                          type="button"
-                          className="font-mono text-sm text-emerald-400 hover:text-emerald-300"
-                          title={
-                            transaction.hash
-                          }
-                        >
-                          {formatAddress(
-                            transaction.hash,
-                          )}
-                        </button>
-
-                        {transaction.type ===
-                          'ETH_DEPOSIT' && (
-
-                          <div className="mt-2 space-y-1 text-xs text-slate-500">
-
-                            <div>
-                              From:{' '}
-                              <span className="font-mono text-slate-400">
-                                {formatAddress(
-                                  transaction.from,
-                                )}
-                              </span>
-                            </div>
-
-                            <div>
-                              To:{' '}
-                              <span className="font-mono text-slate-400">
-                                {formatAddress(
-                                  transaction.to,
-                                )}
-                              </span>
-                            </div>
-
-                          </div>
+                      <button
+                        type="button"
+                        className="font-mono text-sm text-emerald-400 hover:text-emerald-300"
+                        title={
+                          transaction.hash
+                        }
+                      >
+                        {formatAddress(
+                          transaction.hash,
                         )}
-
-                      </div>
+                      </button>
 
                     </td>
+
+
+                    {/* Pair / Type */}
 
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.pair}
                     </td>
 
+
+                    {/* Amount */}
+
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.amount}
                     </td>
+
+
+                    {/* Gross Profit */}
 
                     <td className="px-6 py-5 text-sm font-semibold text-white">
                       {transaction.grossProfit}
                     </td>
 
+
+                    {/* Net Profit */}
+
                     <td className="px-6 py-5 text-sm font-semibold text-emerald-400">
                       {transaction.netProfit}
                     </td>
+
+
+                    {/* Gas */}
 
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.gas}
                     </td>
 
+
+                    {/* Status */}
+
                     <td className="px-6 py-5">
 
-                      <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
+                      <span
+                        className={
+                          transaction.status ===
+                          'SUCCESS'
+                            ? 'inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400'
+                            : 'inline-flex rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400'
+                        }
+                      >
                         {transaction.status}
                       </span>
 
                     </td>
+
+
+                    {/* Time */}
 
                     <td className="whitespace-nowrap px-6 py-5 text-sm text-slate-300">
                       {transaction.time}
@@ -841,17 +1145,47 @@ function TransactionsPage() {
                 ),
               )}
 
+
+              {/* Empty State */}
+
+              {!loading &&
+                mergedTransactions.length === 0 && (
+
+                <tr>
+
+                  <td
+                    colSpan={8}
+                    className="px-6 py-12 text-center"
+                  >
+
+                    <p className="text-sm font-medium text-slate-300">
+                      No transactions found.
+                    </p>
+
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Completed arbitrage executions will appear here automatically.
+                    </p>
+
+                  </td>
+
+                </tr>
+              )}
+
             </tbody>
 
           </table>
 
         </div>
 
-        {/* Mobile Cards */}
+
+        {/* ==================================================
+            Mobile Cards
+            ================================================== */}
 
         <div className="space-y-4 p-4 md:hidden">
 
-          {transactions.map(
+          {mergedTransactions.map(
             (
               transaction,
             ) => (
@@ -863,7 +1197,9 @@ function TransactionsPage() {
                 className="rounded-lg border border-slate-800 bg-slate-900/40 p-4"
               >
 
-                <div className="flex items-center justify-between">
+                {/* Header */}
+
+                <div className="flex items-center justify-between gap-3">
 
                   <button
                     type="button"
@@ -877,41 +1213,27 @@ function TransactionsPage() {
                     )}
                   </button>
 
-                  <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400">
+
+                  <span
+                    className={
+                      transaction.status ===
+                      'SUCCESS'
+                        ? 'rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-400'
+                        : 'rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-xs text-red-400'
+                    }
+                  >
                     {transaction.status}
                   </span>
 
                 </div>
 
-                {transaction.type ===
-                  'ETH_DEPOSIT' && (
 
-                  <div className="mt-3 space-y-1 text-xs text-slate-500">
-
-                    <div>
-                      From:{' '}
-                      <span className="font-mono text-slate-400">
-                        {formatAddress(
-                          transaction.from,
-                        )}
-                      </span>
-                    </div>
-
-                    <div>
-                      To:{' '}
-                      <span className="font-mono text-slate-400">
-                        {formatAddress(
-                          transaction.to,
-                        )}
-                      </span>
-                    </div>
-
-                  </div>
-                )}
+                {/* Details */}
 
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
 
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Pair / Type
                     </p>
@@ -919,9 +1241,12 @@ function TransactionsPage() {
                     <p className="mt-1 text-white">
                       {transaction.pair}
                     </p>
+
                   </div>
 
+
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Amount
                     </p>
@@ -929,9 +1254,12 @@ function TransactionsPage() {
                     <p className="mt-1 text-white">
                       {transaction.amount}
                     </p>
+
                   </div>
 
+
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Gross Profit
                     </p>
@@ -939,9 +1267,12 @@ function TransactionsPage() {
                     <p className="mt-1 text-white">
                       {transaction.grossProfit}
                     </p>
+
                   </div>
 
+
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Net Profit
                     </p>
@@ -949,9 +1280,12 @@ function TransactionsPage() {
                     <p className="mt-1 font-semibold text-emerald-400">
                       {transaction.netProfit}
                     </p>
+
                   </div>
 
+
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Gas
                     </p>
@@ -959,9 +1293,12 @@ function TransactionsPage() {
                     <p className="mt-1 text-white">
                       {transaction.gas}
                     </p>
+
                   </div>
 
+
                   <div>
+
                     <p className="text-xs text-slate-400">
                       Time
                     </p>
@@ -969,12 +1306,33 @@ function TransactionsPage() {
                     <p className="mt-1 text-slate-300">
                       {transaction.time}
                     </p>
+
                   </div>
 
                 </div>
 
               </div>
             ),
+          )}
+
+
+          {/* Mobile Empty State */}
+
+          {!loading &&
+            mergedTransactions.length === 0 && (
+
+            <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-8 text-center">
+
+              <p className="text-sm font-medium text-slate-300">
+                No transactions found.
+              </p>
+
+
+              <p className="mt-2 text-xs text-slate-500">
+                Completed arbitrage executions will appear here automatically.
+              </p>
+
+            </div>
           )}
 
         </div>
@@ -984,5 +1342,10 @@ function TransactionsPage() {
     </main>
   )
 }
+
+
+// ======================================================
+// Export
+// ======================================================
 
 export default TransactionsPage

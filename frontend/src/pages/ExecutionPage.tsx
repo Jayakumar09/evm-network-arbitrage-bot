@@ -28,12 +28,17 @@ import {
   getFlashLoanTransactionResult,
 } from '../services/blockchain'
 
+
 import {
   USDC_ADDRESS,
   WETH_ADDRESS,
 } from '../config/contracts'
 
 import TransactionStatus from '../components/TransactionStatus'
+
+import {
+  saveTransaction,
+} from '../services/transactionHistory'
 
 
 // ======================================================
@@ -328,6 +333,45 @@ function buildDexArbitrageParams(
       operationData,
     ],
   )
+}
+
+// ======================================================
+// Fetch ETH / USD Price
+// ======================================================
+
+async function getEthUsdPrice(): Promise<number> {
+
+  const response =
+    await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+    )
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch ETH/USD price: ${response.status}`,
+    )
+  }
+
+  const data =
+    await response.json()
+
+  const ethUsdPrice =
+    Number(
+      data?.ethereum?.usd,
+    )
+
+  if (
+    !Number.isFinite(
+      ethUsdPrice,
+    ) ||
+    ethUsdPrice <= 0
+  ) {
+    throw new Error(
+      'Invalid ETH/USD price received.',
+    )
+  }
+
+  return ethUsdPrice
 }
 
 
@@ -1156,20 +1200,55 @@ function ExecutionPage() {
 
 
         // ====================================================
-      // Transaction Confirmed
-      // ====================================================
+        // Transaction Confirmed
+        // ====================================================
 
-      async function handleTransactionConfirmed() {
+        async function handleTransactionConfirmed() {
 
-        setExecutionState(
-          'CONFIRMED',
-        )
+          setExecutionState(
+            'CONFIRMED',
+          )
 
-        // --------------------------------------------------
-        // Decode completed flash-loan transaction
-        // --------------------------------------------------
 
-        if (transactionHash) {
+          // --------------------------------------------------
+          // Opportunity must exist
+          // --------------------------------------------------
+
+          if (!opportunity) {
+
+            console.error(
+              '[EXECUTION RESULT] Cannot save transaction: opportunity is missing.',
+            )
+
+            return
+          }
+
+
+          // --------------------------------------------------
+          // Keep a stable non-null reference
+          // --------------------------------------------------
+
+          const confirmedOpportunity =
+            opportunity
+
+
+          // --------------------------------------------------
+          // Transaction hash must exist
+          // --------------------------------------------------
+
+          if (!transactionHash) {
+
+            console.error(
+              '[EXECUTION RESULT] Cannot process transaction: hash is missing.',
+            )
+
+            return
+          }
+
+
+          // --------------------------------------------------
+          // Decode completed flash-loan transaction
+          // --------------------------------------------------
 
           try {
 
@@ -1177,19 +1256,268 @@ function ExecutionPage() {
               '[EXECUTION RESULT] Loading transaction result...',
             )
 
+
             const result =
               await getFlashLoanTransactionResult(
                 transactionHash,
               )
+
 
             setFlashLoanResult(
               result,
             )
 
             console.log(
-              '[EXECUTION RESULT] Transaction result loaded:',
+              '==================================================',
+            )
+
+            console.log(
+              '[TRANSACTION SAVE DEBUG] RESULT STATUS:',
+              result.status,
+            )
+
+            console.log(
+              '[TRANSACTION SAVE DEBUG] RESULT:',
               result,
             )
+
+            console.log(
+              '[TRANSACTION SAVE DEBUG] TRANSACTION HASH:',
+              transactionHash,
+            )
+
+            console.log(
+              '[TRANSACTION SAVE DEBUG] OPPORTUNITY:',
+              confirmedOpportunity,
+            )
+
+            console.log(
+              '[TRANSACTION SAVE DEBUG] BEFORE LOCAL STORAGE:',
+              localStorage.getItem(
+                'flashloan_arbitrage_transaction_history',
+              ),
+            )
+
+            console.log(
+              '==================================================',
+            )
+
+            // ==================================================
+            // Save Successful Arbitrage Transaction
+            // ==================================================
+
+            if (
+              result.status === true
+            ) {
+
+              console.log(
+                '[TRANSACTION SAVE DEBUG] STATUS CHECK PASSED',
+              )
+
+              // --------------------------------------------------
+              // Validate required transaction data
+              // --------------------------------------------------
+
+              if (
+                !transactionHash ||
+                !confirmedOpportunity
+              ) {
+
+                console.error(
+                  '[TRANSACTION SAVE DEBUG] Missing transaction data:',
+                  {
+                    transactionHash,
+                    confirmedOpportunity,
+                  },
+                )
+
+              } else {
+
+                // --------------------------------------------------
+                // Build transaction record
+                // --------------------------------------------------
+
+                // --------------------------------------------------
+// Calculate Gross Profit
+//
+// On-chain arbitrageProfit is denominated in USDC.
+// --------------------------------------------------
+
+const grossProfitUsdc =
+  Number(
+    formatUnits(
+      result.arbitrageProfit ?? 0n,
+      6,
+    ),
+  )
+
+
+// --------------------------------------------------
+// Calculate Gas Cost
+//
+// gasCostWei is denominated in ETH.
+// --------------------------------------------------
+
+const gasCostEth =
+  result.gasCostWei !== undefined
+    ? Number(
+        formatUnits(
+          result.gasCostWei,
+          18,
+        ),
+      )
+    : 0
+
+
+// --------------------------------------------------
+// Fetch current ETH/USD price
+// --------------------------------------------------
+
+let ethUsdPrice = 0
+
+try {
+
+  ethUsdPrice =
+    await getEthUsdPrice()
+
+  console.log(
+    '[TRANSACTION PROFIT DEBUG] ETH/USD:',
+    ethUsdPrice,
+  )
+
+} catch (priceError) {
+
+  console.error(
+    '[TRANSACTION PROFIT DEBUG] Failed to fetch ETH/USD price:',
+    priceError,
+  )
+
+  // ------------------------------------------------
+  // Do not invent a net-profit value.
+  // ------------------------------------------------
+
+  ethUsdPrice = 0
+}
+
+
+// --------------------------------------------------
+// Calculate Gas Cost in USD
+// --------------------------------------------------
+
+const gasCostUsd =
+  ethUsdPrice > 0
+    ? gasCostEth * ethUsdPrice
+    : 0
+
+
+// --------------------------------------------------
+// Calculate True Net Profit
+//
+// Gross Profit:
+//   arbitrage profit before blockchain gas.
+//
+// Net Profit:
+//   arbitrage profit - gas cost.
+//
+// If ETH/USD could not be obtained, preserve
+// transparency instead of showing a false value.
+// --------------------------------------------------
+
+const netProfitUsdc =
+  ethUsdPrice > 0
+    ? grossProfitUsdc - gasCostUsd
+    : null
+
+
+        // --------------------------------------------------
+        // Build Transaction Record
+        // --------------------------------------------------
+
+        const transactionRecord = {
+
+          hash:
+            transactionHash,
+
+          status:
+            'SUCCESS' as const,
+
+          type:
+            'ARBITRAGE' as const,
+
+          pair:
+            `${confirmedOpportunity.tokenIn} → ${confirmedOpportunity.tokenOut} → ${confirmedOpportunity.tokenIn}`,
+
+          amount:
+            `${confirmedOpportunity.loanAmount} ${confirmedOpportunity.tokenIn}`,
+
+          grossProfit:
+            `$${grossProfitUsdc.toFixed(6)}`,
+
+          netProfit:
+            netProfitUsdc !== null
+              ? `$${netProfitUsdc.toFixed(6)}`
+              : '—',
+
+          gas:
+            result.gasCostWei !== undefined
+              ? `${gasCostEth} ETH`
+              : '—',
+
+          time:
+            new Date().toLocaleString(),
+        }
+
+                // --------------------------------------------------
+                // Debug transaction record
+                // --------------------------------------------------
+
+                console.log(
+                  '[TRANSACTION SAVE DEBUG] TRANSACTION RECORD:',
+                  transactionRecord,
+                )
+
+                console.log(
+                  '[TRANSACTION SAVE DEBUG] BEFORE SAVE:',
+                  localStorage.getItem(
+                    'flashloan_arbitrage_transaction_history',
+                  ),
+                )
+
+                // --------------------------------------------------
+                // Save transaction
+                // --------------------------------------------------
+
+                saveTransaction(
+                  transactionRecord,
+                )
+
+                // --------------------------------------------------
+                // Verify localStorage immediately
+                // --------------------------------------------------
+
+                console.log(
+                  '[TRANSACTION SAVE DEBUG] AFTER SAVE:',
+                  localStorage.getItem(
+                    'flashloan_arbitrage_transaction_history',
+                  ),
+                )
+
+                console.log(
+                  '[TRANSACTION SAVE DEBUG] Arbitrage transaction saved successfully.',
+                )
+              }
+
+            } else {
+
+              console.warn(
+                '[TRANSACTION SAVE DEBUG] Flash loan result was not successful.',
+                {
+                  status: result.status,
+                  transactionHash,
+                },
+              )
+            }
+
 
           } catch (error) {
 
@@ -1198,51 +1526,54 @@ function ExecutionPage() {
               error,
             )
 
+
             setFlashLoanResult(
               null,
             )
+          }
 
+
+          // --------------------------------------------------
+          // Refresh Executor Status
+          // --------------------------------------------------
+
+          try {
+
+            const [
+              wallet,
+              owner,
+              paused,
+            ] = await Promise.all([
+              getConnectedWalletAddress(),
+              getExecutorOwner(),
+              getExecutorPaused(),
+            ])
+
+
+            setWalletAddress(
+              wallet,
+            )
+
+
+            setIsOwner(
+              wallet !== null &&
+              wallet.toLowerCase() ===
+                owner.toLowerCase(),
+            )
+
+
+            setIsPaused(
+              paused,
+            )
+
+          } catch (error) {
+
+            console.error(
+              'Failed to refresh executor status:',
+              error,
+            )
           }
         }
-
-        // --------------------------------------------------
-        // Refresh Executor Status
-        // --------------------------------------------------
-
-        try {
-
-          const [
-            wallet,
-            owner,
-            paused,
-          ] = await Promise.all([
-            getConnectedWalletAddress(),
-            getExecutorOwner(),
-            getExecutorPaused(),
-          ])
-
-          setWalletAddress(
-            wallet,
-          )
-
-          setIsOwner(
-            wallet !== null &&
-            wallet.toLowerCase() ===
-              owner.toLowerCase(),
-          )
-
-          setIsPaused(
-            paused,
-          )
-
-        } catch (error) {
-
-          console.error(
-            'Failed to refresh executor status:',
-            error,
-          )
-        }
-      }
 
 
   // ====================================================
