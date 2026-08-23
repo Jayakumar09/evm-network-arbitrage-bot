@@ -22,95 +22,131 @@ import {
   getExecutorWETHBalance,
   getWalletETHBalance,
   getWalletUSDCBalance,
+  getWalletCircleUSDCBalance,
   getWalletWETHBalance,
   transferExecutorOwnership,
-  withdrawExecutorETH,
 } from '../services/blockchain'
 
-import {
-  saveTransaction,
-} from '../services/transactionHistory'
 
 // ======================================================
 // Contract Page
 // ======================================================
 
 function ContractPage() {
-  // ======================================================
+
+  // ====================================================
   // Wallet State
-  // ======================================================
+  // ====================================================
 
-  const [connectedWallet, setConnectedWallet] =
-    useState<string | null>(null)
+  const [
+    connectedWallet,
+    setConnectedWallet,
+  ] = useState<string | null>(null)
 
-  const [contractOwner, setContractOwner] =
-    useState<string>('')
+  const [
+    contractOwner,
+    setContractOwner,
+  ] = useState('')
 
-  const [isOwner, setIsOwner] =
-    useState(false)
+  const [
+    isOwner,
+    setIsOwner,
+  ] = useState(false)
 
-  const [isPaused, setIsPaused] =
-    useState(false)
+  const [
+    isPaused,
+    setIsPaused,
+  ] = useState(false)
 
-  const [isConnected, setIsConnected] =
-    useState(false)
+  const [
+    isConnected,
+    setIsConnected,
+  ] = useState(false)
 
-  const [loading, setLoading] =
-    useState(true)
+  const [
+    loading,
+    setLoading,
+  ] = useState(true)
 
 
-  // ======================================================
+  // ====================================================
   // Owner Controls
-  // ======================================================
+  // ====================================================
 
-  const [ownerActionLoading, setOwnerActionLoading] =
-    useState(false)
+  const [
+    ownerActionLoading,
+    setOwnerActionLoading,
+  ] = useState(false)
 
-  const [ownerActionMessage, setOwnerActionMessage] =
-    useState('')
+  const [
+    ownerActionMessage,
+    setOwnerActionMessage,
+  ] = useState('')
 
-  const [ownerActionError, setOwnerActionError] =
-    useState('')
+  const [
+    ownerActionError,
+    setOwnerActionError,
+  ] = useState('')
 
-  const [newOwnerAddress, setNewOwnerAddress] =
-    useState('')
+  const [
+    newOwnerAddress,
+    setNewOwnerAddress,
+  ] = useState('')
 
 
-  // ======================================================
+  // ====================================================
   // Contract Balances
-  // ======================================================
+  // ====================================================
 
-  const [ethBalance, setEthBalance] =
-    useState('0.000000')
+  const [
+    ethBalance,
+    setEthBalance,
+  ] = useState('0.000000')
 
-  const [usdcBalance, setUsdcBalance] =
-    useState('0.00')
+  const [
+    usdcBalance,
+    setUsdcBalance,
+  ] = useState('0.00')
 
-  const [wethBalance, setWethBalance] =
-    useState('0.000000')
+  const [
+    wethBalance,
+    setWethBalance,
+  ] = useState('0.000000')
 
 
-  // ======================================================
+  // ====================================================
   // Wallet Balances
-  // ======================================================
+  // ====================================================
+
+  const [
+    walletEthBalance,
+    setWalletEthBalance,
+  ] = useState('0.000000')
+
+  const [
+    walletUsdcBalance,
+    setWalletUsdcBalance,
+  ] = useState('0.00')
+
+  const [
+    walletCircleUsdcBalance,
+    setWalletCircleUsdcBalance,
+  ] = useState('0.00')
+
+  const [
+    walletWethBalance,
+    setWalletWethBalance,
+  ] = useState('0.000000')
 
 
-  const [walletEthBalance, setWalletEthBalance] =
-    useState<string>('0.000000')
-
-  const [walletUsdcBalance, setWalletUsdcBalance] =
-    useState<string>('0.00')
-
-  const [walletWethBalance, setWalletWethBalance] =
-    useState<string>('0.000000')
-
-  // ======================================================
+  // ====================================================
   // Format Address
-  // ======================================================
+  // ====================================================
 
   function formatAddress(
     address: string | null,
   ): string {
+
     if (!address) {
       return 'Not connected'
     }
@@ -118,58 +154,28 @@ function ContractPage() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  // ======================================================
-  // Load Contract Data
-  // ======================================================
 
-    // ======================================================
+  // ====================================================
   // Load Contract Data
-  // ======================================================
+  // ====================================================
 
   useEffect(() => {
 
     let mounted = true
-    let refreshInProgress = false
 
-    // ====================================================
-    // Load Contract Data
-    // ====================================================
+
 
     async function loadContractData(
-        source: string = 'UNKNOWN',
-        showLoading: boolean = false,
-      ) {
+      showLoading: boolean = false,
+    ) {
 
-      // --------------------------------------------------
-      // Prevent overlapping refresh requests
-      // --------------------------------------------------
 
-      if (refreshInProgress) {
 
-        console.log(
-          '[CONTRACT DEBUG] Refresh skipped - previous refresh still running.',
-        )
 
-        return
-      }
 
-      refreshInProgress = true
 
-      console.log(
-        '====================================================',
-      )
 
-      console.log(
-        `[CONTRACT DEBUG] Refresh START - source: ${source}`,
-      )
 
-      console.log(
-        `[CONTRACT DEBUG] Time: ${new Date().toLocaleTimeString()}`,
-      )
-
-      console.log(
-        '====================================================',
-      )
 
       try {
 
@@ -177,30 +183,29 @@ function ContractPage() {
           return
         }
 
-       if (showLoading) {
+
+        if (showLoading) {
           setLoading(true)
         }
 
 
-        // --------------------------------------------------
-        // Wallet
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Connected wallet
+        // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading connected wallet...',
-        )
+
 
         const wallet =
           await getConnectedWalletAddress()
 
-        console.log(
-          '[CONTRACT DEBUG] Connected wallet:',
-          wallet,
-        )
+
+
+
 
         if (!mounted) {
           return
         }
+
 
         setConnectedWallet(wallet)
 
@@ -209,80 +214,75 @@ function ContractPage() {
         )
 
 
-        // --------------------------------------------------
-        // Contract Owner
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Contract owner
+        // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading contract owner...',
-        )
+
 
         const owner =
           await getExecutorOwner()
 
-        console.log(
-          '[CONTRACT DEBUG] Contract owner:',
-          owner,
-        )
+
+
+
 
         if (!mounted) {
           return
         }
 
+
         setContractOwner(owner)
 
 
-        // --------------------------------------------------
-        // Owner Verification
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Owner authorization
+        // ------------------------------------------------
 
         const ownerStatus =
           wallet !== null &&
           wallet.toLowerCase() ===
-          owner.toLowerCase()
+            owner.toLowerCase()
 
-        console.log(
-          '[CONTRACT DEBUG] Owner authorization:',
-          ownerStatus,
-        )
+
+
+
 
         setIsOwner(
           ownerStatus,
         )
 
 
-        // --------------------------------------------------
-        // Paused Status
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Paused status
+        // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading contract paused status...',
-        )
+
 
         const paused =
           await getExecutorPaused()
 
-        console.log(
-          '[CONTRACT DEBUG] Contract paused:',
-          paused,
-        )
+
+
+
 
         if (!mounted) {
           return
         }
 
-        setIsPaused(paused)
+
+        setIsPaused(
+          paused,
+        )
 
 
-        // --------------------------------------------------
-        // No Wallet
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // No wallet
+        // ------------------------------------------------
 
         if (!wallet) {
 
-          console.log(
-            '[CONTRACT DEBUG] No wallet connected. Resetting balances.',
-          )
+
 
           setEthBalance('0.000000')
           setUsdcBalance('0.00')
@@ -290,19 +290,19 @@ function ContractPage() {
 
           setWalletEthBalance('0.000000')
           setWalletUsdcBalance('0.00')
+          setWalletCircleUsdcBalance('0.00')
           setWalletWethBalance('0.000000')
 
           return
         }
 
 
-        // --------------------------------------------------
-        // Read All Balances
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Read all balances
+        // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading blockchain balances...',
-        )
+
+
 
         const [
           eth,
@@ -310,10 +310,11 @@ function ContractPage() {
           weth,
           walletEth,
           walletUsdc,
+          walletCircleUsdc,
           walletWeth,
         ] = await Promise.all([
 
-          // Executor contract
+          // Executor
           getExecutorETHBalance(),
           getExecutorUSDCBalance(),
           getExecutorWETHBalance(),
@@ -321,6 +322,7 @@ function ContractPage() {
           // Connected wallet
           getWalletETHBalance(),
           getWalletUSDCBalance(),
+          getWalletCircleUSDCBalance(),
           getWalletWETHBalance(),
 
         ])
@@ -331,44 +333,16 @@ function ContractPage() {
         }
 
 
-        // --------------------------------------------------
-        // Debug Raw Values
-        // --------------------------------------------------
-
-        console.log(
-          '[CONTRACT DEBUG] Executor ETH:',
-          eth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Executor USDC:',
-          usdc,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Executor WETH:',
-          weth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet ETH:',
-          walletEth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet USDC:',
-          walletUsdc,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet WETH:',
-          walletWeth,
-        )
+        // ------------------------------------------------
+        // Debug raw values
+        // ------------------------------------------------
 
 
-        // --------------------------------------------------
-        // Executor Contract Balances
-        // --------------------------------------------------
+
+
+        // ------------------------------------------------
+        // Executor balances
+        // ------------------------------------------------
 
         setEthBalance(
           Number(eth).toFixed(6),
@@ -383,9 +357,9 @@ function ContractPage() {
         )
 
 
-        // --------------------------------------------------
-        // Connected Wallet Balances
-        // --------------------------------------------------
+        // ------------------------------------------------
+        // Wallet balances
+        // ------------------------------------------------
 
         setWalletEthBalance(
           Number(walletEth).toFixed(6),
@@ -395,14 +369,16 @@ function ContractPage() {
           Number(walletUsdc).toFixed(2),
         )
 
+        setWalletCircleUsdcBalance(
+          Number(walletCircleUsdc).toFixed(2),
+        )
+
         setWalletWethBalance(
           Number(walletWeth).toFixed(6),
         )
 
 
-        console.log(
-          '[CONTRACT DEBUG] UI balances updated successfully.',
-        )
+
 
       } catch (error) {
 
@@ -411,9 +387,11 @@ function ContractPage() {
           error,
         )
 
+
         if (!mounted) {
           return
         }
+
 
         setConnectedWallet(null)
         setIsConnected(false)
@@ -421,68 +399,49 @@ function ContractPage() {
 
         setWalletEthBalance('0.000000')
         setWalletUsdcBalance('0.00')
+        setWalletCircleUsdcBalance('0.00')
         setWalletWethBalance('0.000000')
 
-      }finally {
-
-        refreshInProgress = false
-
+      } finally {
         if (
           mounted &&
           showLoading
         ) {
           setLoading(false)
         }
-
-        console.log(
-          `[CONTRACT DEBUG] Refresh END - source: ${source}`,
-        )
       }
     }
 
 
-    // ====================================================
-    // Initial Load
-    // ====================================================
-
-    console.log(
-      '[CONTRACT DEBUG] ContractPage mounted.',
-    )
-
-    loadContractData(
-        'INITIAL_LOAD',
-        true,
-      )
+    // ==================================================
+    // Initial load
+    // ==================================================
 
 
-    // ====================================================
-    // Automatic Refresh
+
+    loadContractData(true)
+
+
+    // ==================================================
+    // Automatic refresh
     //
-    // Refresh every 5 seconds.
-    // This allows blockchain balance changes to appear
-    // without pressing CTRL+R.
-    // ====================================================
+    // Keep the existing 5-second refresh behavior.
+    // ==================================================
 
     const refreshInterval =
       window.setInterval(
         () => {
 
-          console.log(
-            '[CONTRACT DEBUG] Automatic 5-second refresh.',
-          )
-
-          loadContractData(
-            'AUTO_REFRESH',
-          )
+          loadContractData()
 
         },
         5000,
       )
 
 
-    // ====================================================
-    // MetaMask Event Handlers
-    // ====================================================
+    // ==================================================
+    // MetaMask
+    // ==================================================
 
     const ethereum =
       window.ethereum
@@ -494,6 +453,7 @@ function ContractPage() {
         '[CONTRACT DEBUG] MetaMask / window.ethereum not available.',
       )
 
+
       return () => {
 
         mounted = false
@@ -501,14 +461,13 @@ function ContractPage() {
         window.clearInterval(
           refreshInterval,
         )
-
       }
     }
 
 
-    // ----------------------------------------------------
-    // Account Changed
-    // ----------------------------------------------------
+    // --------------------------------------------------
+    // Account changed
+    // --------------------------------------------------
 
     const handleAccountsChanged =
       () => {
@@ -517,15 +476,13 @@ function ContractPage() {
           '[CONTRACT DEBUG] MetaMask account changed.',
         )
 
-        loadContractData(
-          'METAMASK_ACCOUNT_CHANGED',
-        )
+        loadContractData()
       }
 
 
-    // ----------------------------------------------------
-    // Chain Changed
-    // ----------------------------------------------------
+    // --------------------------------------------------
+    // Chain changed
+    // --------------------------------------------------
 
     const handleChainChanged =
       () => {
@@ -534,15 +491,13 @@ function ContractPage() {
           '[CONTRACT DEBUG] MetaMask network changed.',
         )
 
-        loadContractData(
-          'METAMASK_CHAIN_CHANGED',
-        )
+        loadContractData()
       }
 
 
-    // ----------------------------------------------------
-    // Window Focus
-    // ----------------------------------------------------
+    // --------------------------------------------------
+    // Window focus
+    // --------------------------------------------------
 
     const handleWindowFocus =
       () => {
@@ -551,15 +506,13 @@ function ContractPage() {
           '[CONTRACT DEBUG] Browser window focused - refreshing.',
         )
 
-        loadContractData(
-          'WINDOW_FOCUS',
-        )
+        loadContractData()
       }
 
 
-    // ----------------------------------------------------
-    // Page Visibility
-    // ----------------------------------------------------
+    // --------------------------------------------------
+    // Page visible
+    // --------------------------------------------------
 
     const handleVisibilityChange =
       () => {
@@ -569,20 +522,16 @@ function ContractPage() {
           'visible'
         ) {
 
-          console.log(
-            '[CONTRACT DEBUG] Page became visible - refreshing.',
-          )
 
-          loadContractData(
-            'PAGE_VISIBLE',
-          )
+
+          loadContractData()
         }
       }
 
 
-    // ====================================================
-    // Register Events
-    // ====================================================
+    // ==================================================
+    // Register listeners
+    // ==================================================
 
     ethereum.on(
       'accountsChanged',
@@ -605,15 +554,13 @@ function ContractPage() {
     )
 
 
-    // ====================================================
+    // ==================================================
     // Cleanup
-    // ====================================================
+    // ==================================================
 
     return () => {
 
-      console.log(
-        '[CONTRACT DEBUG] ContractPage unmounted. Cleaning up.',
-      )
+
 
       mounted = false
 
@@ -645,266 +592,287 @@ function ContractPage() {
   }, [])
 
 
-  // ======================================================
-// Pause Executor
-// ======================================================
+  // ====================================================
+  // Pause Executor
+  // ====================================================
 
-async function handlePauseExecutor() {
-  if (!isOwner) {
-    return
-  }
+  async function handlePauseExecutor() {
 
-  try {
-    setOwnerActionLoading(true)
-    setOwnerActionMessage('')
-    setOwnerActionError('')
-
-    const transactionHash =
-      await emergencyPauseExecutor()
-
-    // --------------------------------------------------
-    // Update frontend state immediately
-    // Transaction has already been confirmed
-    // --------------------------------------------------
-
-    setIsPaused(true)
-
-    setOwnerActionMessage(
-      `Contract paused successfully. Transaction: ${transactionHash}`,
-    )
-  } catch (error) {
-    console.error(
-      'Failed to pause executor:',
-      error,
-    )
-
-    setOwnerActionError(
-      error instanceof Error
-        ? error.message
-        : 'Failed to pause contract.',
-    )
-  } finally {
-    setOwnerActionLoading(false)
-  }
-}
-
-
-// ======================================================
-// Unpause Executor
-// ======================================================
-
-async function handleUnpauseExecutor() {
-  if (!isOwner) {
-    return
-  }
-
-  try {
-    setOwnerActionLoading(true)
-    setOwnerActionMessage('')
-    setOwnerActionError('')
-
-    const transactionHash =
-      await emergencyUnpauseExecutor()
-
-    // --------------------------------------------------
-    // Update frontend state immediately
-    // Transaction has already been confirmed
-    // --------------------------------------------------
-
-    setIsPaused(false)
-
-    setOwnerActionMessage(
-      `Contract unpaused successfully. Transaction: ${transactionHash}`,
-    )
-  } catch (error) {
-    console.error(
-      'Failed to unpause executor:',
-      error,
-    )
-
-    setOwnerActionError(
-      error instanceof Error
-        ? error.message
-        : 'Failed to unpause contract.',
-    )
-  } finally {
-    setOwnerActionLoading(false)
-  }
-}
-
-
-  // ======================================================
-  // Withdraw Executor ETH
-  // ======================================================
-
-  async function handleWithdrawExecutorETH() {
-    if (!isOwner || !connectedWallet) {
+    if (
+      !isOwner ||
+      ownerActionLoading
+    ) {
       return
     }
 
+
     try {
+
       setOwnerActionLoading(true)
       setOwnerActionMessage('')
       setOwnerActionError('')
 
-      // --------------------------------------------------
-      // Read Executor ETH balance BEFORE withdrawal
-      // --------------------------------------------------
-
-      const withdrawalAmount =
-        await getExecutorETHBalance()
 
       console.log(
-        '[CONTRACT DEBUG] ETH withdrawal amount:',
-        withdrawalAmount,
+        '[CONTRACT DEBUG] Starting Executor pause...',
       )
 
-      // --------------------------------------------------
-      // Execute withdrawal
-      // --------------------------------------------------
 
       const transactionHash =
-        await withdrawExecutorETH(
-          connectedWallet,
-        )
+        await emergencyPauseExecutor()
 
-      // --------------------------------------------------
-      // Save successful transaction
-      // --------------------------------------------------
 
-      saveTransaction({
-        hash: transactionHash,
-        status: 'SUCCESS',
-        type: 'ETH_WITHDRAWAL',
-        pair: 'Executor → Owner',
-        amount: `${Number(withdrawalAmount).toFixed(6)} ETH`,
-        grossProfit: '—',
-        netProfit: '—',
-        gas: '—',
-        time: new Date().toLocaleString(),
-      })
-
-      // --------------------------------------------------
-      // Refresh balances after transaction confirmation
-      // --------------------------------------------------
-
-      const [
-        executorEth,
-        walletEth,
-      ] = await Promise.all([
-        getExecutorETHBalance(),
-        getWalletETHBalance(),
-      ])
-
-      setEthBalance(
-        Number(executorEth).toFixed(6),
+      console.log(
+        '[CONTRACT DEBUG] Executor pause confirmed:',
+        transactionHash,
       )
 
-      setWalletEthBalance(
-        Number(walletEth).toFixed(6),
+
+      const paused =
+        await getExecutorPaused()
+
+
+      console.log(
+        '[CONTRACT DEBUG] Executor paused state after transaction:',
+        paused,
       )
+
+
+      setIsPaused(
+        paused,
+      )
+
 
       setOwnerActionMessage(
-        `Executor ETH withdrawn successfully. Transaction: ${transactionHash}`,
+        `Contract paused successfully. Transaction: ${transactionHash}`,
       )
+
     } catch (error) {
+
       console.error(
-        'Failed to withdraw executor ETH:',
+        '[CONTRACT DEBUG] Failed to pause Executor:',
         error,
       )
+
 
       setOwnerActionError(
         error instanceof Error
           ? error.message
-          : 'Failed to withdraw Executor ETH.',
+          : 'Failed to pause contract.',
       )
+
     } finally {
+
       setOwnerActionLoading(false)
     }
   }
 
-  // ======================================================
-  // Transfer Ownership
-  // ======================================================
 
-  async function handleTransferOwnership() {
-    if (!isOwner) {
-      return
-    }
+  // ====================================================
+  // Unpause Executor
+  // ====================================================
 
-    if (!newOwnerAddress.trim()) {
-      setOwnerActionError(
-        'Enter a new owner address.',
-      )
-      return
-    }
+  async function handleUnpauseExecutor() {
 
     if (
-      !/^0x[a-fA-F0-9]{40}$/.test(
-        newOwnerAddress.trim(),
-      )
+      !isOwner ||
+      ownerActionLoading
     ) {
-      setOwnerActionError(
-        'Enter a valid Ethereum address.',
-      )
       return
     }
 
+
     try {
+
       setOwnerActionLoading(true)
       setOwnerActionMessage('')
       setOwnerActionError('')
 
+
+      console.log(
+        '[CONTRACT DEBUG] Starting Executor unpause...',
+      )
+
+
+      const transactionHash =
+        await emergencyUnpauseExecutor()
+
+
+      console.log(
+        '[CONTRACT DEBUG] Executor unpause confirmed:',
+        transactionHash,
+      )
+
+
+      const paused =
+        await getExecutorPaused()
+
+
+      console.log(
+        '[CONTRACT DEBUG] Executor paused state after transaction:',
+        paused,
+      )
+
+
+      setIsPaused(
+        paused,
+      )
+
+
+      setOwnerActionMessage(
+        `Contract unpaused successfully. Transaction: ${transactionHash}`,
+      )
+
+    } catch (error) {
+
+      console.error(
+        '[CONTRACT DEBUG] Failed to unpause Executor:',
+        error,
+      )
+
+
+      setOwnerActionError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to unpause contract.',
+      )
+
+    } finally {
+
+      setOwnerActionLoading(false)
+    }
+  }
+
+
+  // ====================================================
+  // Transfer Ownership
+  // ====================================================
+
+  async function handleTransferOwnership() {
+
+    if (
+      !isOwner ||
+      ownerActionLoading
+    ) {
+      return
+    }
+
+
+    const targetAddress =
+      newOwnerAddress.trim()
+
+
+    if (!targetAddress) {
+
+      setOwnerActionError(
+        'Enter a new owner address.',
+      )
+
+      return
+    }
+
+
+    if (
+      !/^0x[a-fA-F0-9]{40}$/.test(
+        targetAddress,
+      )
+    ) {
+
+      setOwnerActionError(
+        'Enter a valid Ethereum address.',
+      )
+
+      return
+    }
+
+
+    try {
+
+      setOwnerActionLoading(true)
+      setOwnerActionMessage('')
+      setOwnerActionError('')
+
+
+      console.log(
+        '[CONTRACT DEBUG] Starting ownership transfer:',
+        targetAddress,
+      )
+
+
       const transactionHash =
         await transferExecutorOwnership(
-          newOwnerAddress.trim(),
+          targetAddress,
         )
+
+
+      console.log(
+        '[CONTRACT DEBUG] Ownership transfer confirmed:',
+        transactionHash,
+      )
+
+
+      // ------------------------------------------------
+      // Re-read actual owner from blockchain
+      // ------------------------------------------------
+
+      const owner =
+        await getExecutorOwner()
+
+
+      const wallet =
+        await getConnectedWalletAddress()
+
+
+      setContractOwner(
+        owner,
+      )
+
+      setConnectedWallet(
+        wallet,
+      )
+
+      setIsConnected(
+        wallet !== null,
+      )
+
+      setIsOwner(
+        wallet !== null &&
+        wallet.toLowerCase() ===
+          owner.toLowerCase(),
+      )
+
+
+      setNewOwnerAddress('')
+
 
       setOwnerActionMessage(
         `Ownership transferred successfully. Transaction: ${transactionHash}`,
       )
 
-      const owner =
-        await getExecutorOwner()
-
-      setContractOwner(owner)
-
-      const wallet =
-        await getConnectedWalletAddress()
-
-      setConnectedWallet(wallet)
-      setIsConnected(wallet !== null)
-
-      if (wallet) {
-        setIsOwner(
-          wallet.toLowerCase() ===
-          owner.toLowerCase(),
-        )
-      } else {
-        setIsOwner(false)
-      }
-
-      setNewOwnerAddress('')
     } catch (error) {
+
       console.error(
-        'Failed to transfer ownership:',
+        '[CONTRACT DEBUG] Failed to transfer ownership:',
         error,
       )
+
 
       setOwnerActionError(
         error instanceof Error
           ? error.message
           : 'Failed to transfer ownership.',
       )
+
     } finally {
+
       setOwnerActionLoading(false)
     }
   }
 
 
-  // ======================================================
+  // ====================================================
   // Render
-  // ======================================================
+  // ====================================================
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
@@ -918,6 +886,7 @@ async function handleUnpauseExecutor() {
         <p className="mb-2 text-sm font-medium text-emerald-400">
           FLASH LOAN ARBITRAGE
         </p>
+
 
         <div className="flex items-center justify-between gap-4">
 
@@ -933,6 +902,7 @@ async function handleUnpauseExecutor() {
             </p>
 
           </div>
+
 
           <span
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${
@@ -972,6 +942,7 @@ async function handleUnpauseExecutor() {
         <h2 className="mb-5 text-lg font-semibold text-white">
           Contract Information
         </h2>
+
 
         <div className="grid gap-4 md:grid-cols-2">
 
@@ -1059,6 +1030,7 @@ async function handleUnpauseExecutor() {
           Wallet & Ownership
         </h2>
 
+
         <div className="space-y-4">
 
           {/* Connected Wallet */}
@@ -1133,14 +1105,18 @@ async function handleUnpauseExecutor() {
         <div className="mb-5 flex items-center justify-between gap-4">
 
           <div>
+
             <h2 className="text-lg font-semibold text-white">
               Owner Controls
             </h2>
 
             <p className="mt-1 text-sm text-slate-400">
-              Emergency controls for the Executor contract.
+              Emergency controls and ownership management
+              for the Executor contract.
             </p>
+
           </div>
+
 
           <span
             className={`rounded-lg px-3 py-1 text-xs font-semibold ${
@@ -1160,23 +1136,28 @@ async function handleUnpauseExecutor() {
 
 
         {!isConnected && (
+
           <div className="mb-5 rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-400">
-            Connect the Executor owner wallet to use owner controls.
+            Connect the Executor owner wallet to use
+            owner controls.
           </div>
+
         )}
 
 
         {isConnected && !isOwner && (
+
           <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
             Connected wallet is not the Executor owner.
             Owner controls are read-only.
           </div>
+
         )}
 
 
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* Pause / Unpause */}
 
-          {/* Pause */}
+        <div className="grid gap-4 md:grid-cols-2">
 
           <button
             type="button"
@@ -1195,8 +1176,6 @@ async function handleUnpauseExecutor() {
                 : 'Pause Contract'}
           </button>
 
-
-          {/* Unpause */}
 
           <button
             type="button"
@@ -1218,39 +1197,6 @@ async function handleUnpauseExecutor() {
         </div>
 
 
-        {/* Withdraw ETH */}
-
-        <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/40 p-5">
-
-          <p className="text-xs uppercase tracking-wide text-slate-400">
-            Withdraw Executor ETH
-          </p>
-
-          <p className="mt-2 text-sm text-slate-400">
-            Withdraw the entire native ETH balance of the Executor to the connected owner wallet.
-          </p>
-
-          <button
-            type="button"
-            onClick={handleWithdrawExecutorETH}
-            disabled={
-              !isOwner ||
-              ownerActionLoading ||
-              isPaused ||
-              !connectedWallet
-            }
-            className="mt-4 w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {ownerActionLoading
-              ? 'Processing...'
-              : isPaused
-                ? 'Contract Paused'
-                : 'Withdraw All ETH to Owner Wallet'}
-          </button>
-
-        </div>
-
-
         {/* Transfer Ownership */}
 
         <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/40 p-5">
@@ -1259,16 +1205,30 @@ async function handleUnpauseExecutor() {
             Transfer Ownership
           </p>
 
+
+          <p className="mt-2 text-sm text-slate-400">
+            Transfer Executor ownership to another Ethereum
+            address. The current connected wallet must remain
+            the owner to perform this action.
+          </p>
+
+
           <div className="mt-3 flex flex-col gap-3 md:flex-row">
 
             <input
               type="text"
               value={newOwnerAddress}
-              onChange={(event) =>
+              onChange={(event) => {
+
                 setNewOwnerAddress(
                   event.target.value,
                 )
-              }
+
+                if (ownerActionError) {
+                  setOwnerActionError('')
+                }
+
+              }}
               disabled={
                 !isOwner ||
                 ownerActionLoading
@@ -1276,6 +1236,7 @@ async function handleUnpauseExecutor() {
               placeholder="0x..."
               className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-white outline-none placeholder:text-slate-600 focus:border-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-40"
             />
+
 
             <button
               type="button"
@@ -1300,18 +1261,22 @@ async function handleUnpauseExecutor() {
         {/* Success Message */}
 
         {ownerActionMessage && (
+
           <div className="mt-4 break-all rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-400">
             {ownerActionMessage}
           </div>
+
         )}
 
 
         {/* Error Message */}
 
         {ownerActionError && (
+
           <div className="mt-4 break-all rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
             {ownerActionError}
           </div>
+
         )}
 
       </section>
@@ -1327,7 +1292,8 @@ async function handleUnpauseExecutor() {
           Wallet Balances
         </h2>
 
-        <div className="grid gap-4 md:grid-cols-3">
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 
           {/* ETH */}
 
@@ -1346,18 +1312,43 @@ async function handleUnpauseExecutor() {
           </div>
 
 
-          {/* USDC */}
+          {/* Aave / Project USDC */}
 
           <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
 
             <p className="text-xs uppercase tracking-wide text-slate-400">
-              Wallet USDC
+              Aave USDC
             </p>
 
             <p className="mt-2 text-2xl font-semibold text-white">
               {loading
                 ? 'Loading...'
                 : `${walletUsdcBalance} USDC`}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Arbitrage USDC
+            </p>
+
+          </div>
+
+
+          {/* Circle USDC */}
+
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Circle USDC
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              {loading
+                ? 'Loading...'
+                : `${walletCircleUsdcBalance} USDC`}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              MetaMask USDC
             </p>
 
           </div>
@@ -1383,17 +1374,27 @@ async function handleUnpauseExecutor() {
 
       </section>
 
+
       {/* ==================================================
           Contract Balances
           ================================================== */}
 
       <section className="mb-6 rounded-xl border border-slate-800 bg-slate-950/60 p-6">
 
-        <h2 className="mb-5 text-lg font-semibold text-white">
-          Contract Balances
-        </h2>
+        <div className="flex items-center justify-between gap-4">
 
-        <div className="grid gap-4 md:grid-cols-3">
+          <h2 className="text-lg font-semibold text-white">
+            Contract Balances
+          </h2>
+
+          <span className="text-xs text-slate-500">
+            Auto-refresh: 5s
+          </span>
+
+        </div>
+
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
 
           {/* ETH */}
 
@@ -1459,6 +1460,7 @@ async function handleUnpauseExecutor() {
         <h2 className="mb-5 text-lg font-semibold text-white">
           Operational Status
         </h2>
+
 
         <div className="space-y-4">
 
@@ -1533,6 +1535,7 @@ async function handleUnpauseExecutor() {
     </main>
   )
 }
+
 
 // ======================================================
 // Export

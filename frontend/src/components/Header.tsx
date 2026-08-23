@@ -13,32 +13,36 @@ function Header() {
   } = useArbitrage()
 
 
-  const navigation = [
-    {
-      name: 'Dashboard',
-      path: '/',
-    },
-    {
-      name: 'Scanner',
-      path: '/scanner',
-    },
-    {
-      name: 'Opportunity',
-      path: '/opportunity',
-    },
-    {
-      name: 'Execution',
-      path: '/execution',
-    },
-    {
-      name: 'Transactions',
-      path: '/transactions',
-    },
-    {
-      name: 'Contract',
-      path: '/contract',
-    },
-  ]
+    const navigation = [
+      {
+        name: 'Dashboard',
+        path: '/',
+      },
+      {
+        name: 'Scanner',
+        path: '/scanner',
+      },
+      {
+        name: 'Opportunity',
+        path: '/opportunity',
+      },
+      {
+        name: 'Execution',
+        path: '/execution',
+      },
+      {
+        name: 'Transactions',
+        path: '/transactions',
+      },
+      {
+        name: 'Withdrawals',
+        path: '/withdrawals',
+      },
+      {
+        name: 'Contract',
+        path: '/contract',
+      },
+    ]
 
 
   return (

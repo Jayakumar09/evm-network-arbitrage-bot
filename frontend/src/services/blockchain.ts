@@ -19,6 +19,7 @@ import type {
 import {
   EXECUTOR_CONTRACT_ADDRESS,
   USDC_ADDRESS,
+  CIRCLE_USDC_ADDRESS,
   WETH_ADDRESS,
 } from '../config/contracts'
 
@@ -51,11 +52,12 @@ const EXECUTOR_WRITE_ABI = [
   'function emergencyUnpause()',
   'function transferOwnership(address newOwner)',
   'function withdrawEth(address to)',
+  'function withdrawToken(address tokenAddress, address to)',
+  'function withdrawWETHAsETH()',
 
   // Flash Loan Arbitrage
   'function executeFlashLoanArbitrage(address asset, uint256 amount, bytes params)',
 ]
-
 // ======================================================
 // Executor Event ABI
 // Used to decode completed flash-loan transactions.
@@ -134,6 +136,197 @@ export async function withdrawExecutorETH(
 
   return transaction.hash
 }
+
+      // ======================================================
+      // Withdraw Executor ERC20 Token
+      // ======================================================
+
+      export async function withdrawExecutorToken(
+        tokenAddress: string,
+        to: string,
+      ): Promise<string> {
+
+        console.log(
+          '========================================',
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] ERC20 withdrawal START',
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Token:',
+          tokenAddress,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Recipient:',
+          to,
+        )
+
+        try {
+
+          const provider =
+            await getProvider()
+
+          const signer =
+            await provider.getSigner()
+
+          const signerAddress =
+            await signer.getAddress()
+
+          console.log(
+            '[CONTRACT DEBUG] Withdrawal signer:',
+            signerAddress,
+          )
+
+          const executor =
+            new Contract(
+              EXECUTOR_CONTRACT_ADDRESS,
+              EXECUTOR_WRITE_ABI,
+              signer,
+            )
+
+          console.log(
+            '[CONTRACT DEBUG] Calling withdrawToken()...',
+          )
+
+          const transaction =
+            await executor.withdrawToken(
+              tokenAddress,
+              to,
+            )
+
+          console.log(
+            '[CONTRACT DEBUG] ERC20 withdrawal transaction:',
+            transaction.hash,
+          )
+
+          // --------------------------------------------------
+          // Wait for blockchain confirmation
+          // --------------------------------------------------
+
+          const receipt =
+            await transaction.wait()
+
+          console.log(
+            '[CONTRACT DEBUG] ERC20 withdrawal confirmed:',
+            receipt?.hash ?? transaction.hash,
+          )
+
+          console.log(
+            '[CONTRACT DEBUG] ERC20 withdrawal END',
+          )
+
+          console.log(
+            '========================================',
+          )
+
+          return transaction.hash
+
+        } catch (error) {
+
+          console.error(
+            '[CONTRACT DEBUG] ERC20 withdrawal FAILED:',
+            error,
+          )
+
+          console.log(
+            '========================================',
+          )
+
+          throw error
+        }
+      }
+
+      // ======================================================
+      // Convert Executor WETH -> Native ETH
+      // ======================================================
+
+      export async function withdrawExecutorWETHAsETH(): Promise<string> {
+
+        console.log(
+          '========================================',
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] WETH -> ETH conversion START',
+        )
+
+        try {
+
+          const provider =
+            await getProvider()
+
+          const signer =
+            await provider.getSigner()
+
+          const signerAddress =
+            await signer.getAddress()
+
+          console.log(
+            '[CONTRACT DEBUG] Conversion signer:',
+            signerAddress,
+          )
+
+          const executor =
+            new Contract(
+              EXECUTOR_CONTRACT_ADDRESS,
+              EXECUTOR_WRITE_ABI,
+              signer,
+            )
+
+          console.log(
+            '[CONTRACT DEBUG] Calling withdrawWETHAsETH()...',
+          )
+
+          const transaction =
+            await executor.withdrawWETHAsETH()
+
+          console.log(
+            '[CONTRACT DEBUG] WETH -> ETH transaction:',
+            transaction.hash,
+          )
+
+          // --------------------------------------------------
+          // Wait for blockchain confirmation
+          // --------------------------------------------------
+
+          const receipt =
+            await transaction.wait()
+
+          console.log(
+            '[CONTRACT DEBUG] WETH -> ETH confirmed:',
+            receipt?.hash ?? transaction.hash,
+          )
+
+          console.log(
+            '[CONTRACT DEBUG] WETH -> ETH conversion END',
+          )
+
+          console.log(
+            '========================================',
+          )
+
+          return transaction.hash
+
+        } catch (error) {
+
+          console.error(
+            '[CONTRACT DEBUG] WETH -> ETH conversion FAILED:',
+            error,
+          )
+
+          console.log(
+            '========================================',
+          )
+
+          throw error
+        }
+      }
+
+
+      
 
 // ======================================================
 // Emergency Pause Executor
@@ -2268,11 +2461,16 @@ export async function getWalletETHBalance(): Promise<string> {
 
 
 // ======================================================
-// Get Connected Wallet USDC Balance
+// Get Connected Wallet ERC20 Token Balance
 // ======================================================
 
-export async function getWalletUSDCBalance(): Promise<string> {
-  const provider = await getProvider()
+export async function getWalletTokenBalance(
+  tokenAddress: string,
+  decimals: number,
+): Promise<string> {
+
+  const provider =
+    await getProvider()
 
   const wallet =
     await getConnectedWalletAddress()
@@ -2281,50 +2479,149 @@ export async function getWalletUSDCBalance(): Promise<string> {
     return '0'
   }
 
-  const usdcContract = new Contract(
-    USDC_ADDRESS,
-    ERC20_ABI,
-    provider,
-  )
+  const tokenContract =
+    new Contract(
+      tokenAddress,
+      ERC20_ABI,
+      provider,
+    )
 
   const balance =
-    await usdcContract.balanceOf(wallet)
+    await tokenContract.balanceOf(
+      wallet,
+    )
 
-  return formatUnits(balance, 6)
+  return formatUnits(
+    balance,
+    decimals,
+  )
 }
 
+
+// ======================================================
+// Get Connected Wallet USDC Balance
+// Aave / Project USDC
+// ======================================================
+
+export async function getWalletUSDCBalance(): Promise<string> {
+
+  return getWalletTokenBalance(
+    USDC_ADDRESS,
+    6,
+  )
+}
+
+
+// ======================================================
+// Get Connected Wallet Circle USDC Balance
+// Circle USDC
+// ======================================================
+
+export async function getWalletCircleUSDCBalance(): Promise<string> {
+
+  return getWalletTokenBalance(
+    CIRCLE_USDC_ADDRESS,
+    6,
+  )
+}
 
 // ======================================================
 // Get Connected Wallet WETH Balance
 // ======================================================
 
 export async function getWalletWETHBalance(): Promise<string> {
-  const provider = await getProvider()
 
-  const wallet =
-    await getConnectedWalletAddress()
+  return getWalletTokenBalance(
+    WETH_ADDRESS,
+    18,
+  )
+}
 
-  if (!wallet) {
-    return '0'
+
+
+// ======================================================
+// Wallet Token Balance Diagnostic
+// ======================================================
+
+export async function diagnoseWalletTokenBalances(): Promise<void> {
+
+  console.log('========================================')
+  console.log('[WALLET BALANCE DIAGNOSTIC] START')
+  console.log('========================================')
+
+  try {
+
+    const wallet =
+      await getConnectedWalletAddress()
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] Wallet:',
+      wallet,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] Aave/Project USDC:',
+      USDC_ADDRESS,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] Circle USDC:',
+      CIRCLE_USDC_ADDRESS,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] WETH:',
+      WETH_ADDRESS,
+    )
+
+    const [
+      usdc,
+      circleUsdc,
+      weth,
+    ] =
+      await Promise.all([
+        getWalletUSDCBalance(),
+        getWalletCircleUSDCBalance(),
+        getWalletWETHBalance(),
+      ])
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] Aave/Project USDC:',
+      usdc,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] Circle USDC:',
+      circleUsdc,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] WETH:',
+      weth,
+    )
+
+    console.log(
+      '[WALLET BALANCE DIAGNOSTIC] SUCCESS',
+    )
+
+  } catch (error) {
+
+    console.error(
+      '[WALLET BALANCE DIAGNOSTIC] FAILED:',
+      error,
+    )
   }
 
-  const wethContract = new Contract(
-    WETH_ADDRESS,
-    ERC20_ABI,
-    provider,
-  )
-
-  const balance =
-    await wethContract.balanceOf(wallet)
-
-  return formatUnits(balance, 18)
+  console.log('========================================')
 }
+
 
 // ======================================================
 // Check Executor Owner
 // ======================================================
 
 export async function isConnectedWalletExecutorOwner(): Promise<boolean> {
+
   const connectedWallet =
     await getConnectedWalletAddress()
 
@@ -2332,7 +2629,8 @@ export async function isConnectedWalletExecutorOwner(): Promise<boolean> {
     return false
   }
 
-  const owner = await getExecutorOwner()
+  const owner =
+    await getExecutorOwner()
 
   return (
     connectedWallet.toLowerCase() ===

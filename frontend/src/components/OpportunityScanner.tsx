@@ -250,7 +250,7 @@ import type {
                     amountOut2Raw,
                     6,
                   )
-
+                  
                 // ==================================================
                 // Profit calculation
                 // ==================================================
@@ -265,18 +265,38 @@ import type {
                   amountOut2Number -
                   loanAmountNumber
 
-                // Aave Sepolia premium = 0.05%
+                // ==================================================
+                // Aave Sepolia Flash Loan Premium
+                // ==================================================
+
                 const flashLoanFee =
                   loanAmountNumber * 0.0005
 
-                // Both quote functions already include
-                // their respective DEX swap fees.
+                // ==================================================
+                // DEX Fees
+                //
+                // The V2 and V3 quote functions already include
+                // their respective swap fees.
+                // ==================================================
+
                 const dexFees = 0
 
-                // Gas will be estimated before execution.
+                // ==================================================
+                // Gas
+                //
+                // Gas will be measured separately during execution.
+                // Keep scanner estimate at zero rather than inventing
+                // a gas price.
+                // ==================================================
+
                 const estimatedGas = 0
 
-                // 1% minimum-output safety threshold.
+                // ==================================================
+                // Minimum Output Protection
+                //
+                // Keep 1% slippage protection on both swaps.
+                // ==================================================
+
                 const minOut1Raw =
                   amountOut1Raw * 99n / 100n
 
@@ -295,10 +315,12 @@ import type {
                     6,
                   )
 
-                const safetyBuffer =
-                  grossProfit > 0
-                    ? grossProfit * 0.10
-                    : 0
+                // ==================================================
+                // Slippage Reserve
+                //
+                // Difference between quoted final output and the
+                // protected minimum final output.
+                // ==================================================
 
                 const slippageCost =
                   Math.max(
@@ -306,6 +328,22 @@ import type {
                       Number(minOut2),
                     0,
                   )
+
+                // ==================================================
+                // Safety Buffer
+                //
+                // Reserve 10% of gross profit as an additional
+                // profitability safety margin.
+                // ==================================================
+
+                const safetyBuffer =
+                  grossProfit > 0
+                    ? grossProfit * 0.10
+                    : 0
+
+                // ==================================================
+                // Estimated Net Profit
+                // ==================================================
 
                 const estimatedNetProfit =
                   grossProfit -
@@ -315,6 +353,33 @@ import type {
                   slippageCost -
                   safetyBuffer
 
+                // ==================================================
+                // Minimum On-Chain Profit
+                //
+                // IMPORTANT:
+                //
+                // The Executor must not accept a trade that has
+                // only 0.01 / 0.05 USDC profit.
+                //
+                // Require at least 10% of the quoted gross profit,
+                // while always covering the Aave flash-loan fee.
+                // ==================================================
+
+                const minimumProfitSafety =
+                  grossProfit > 0
+                    ? grossProfit * 0.10
+                    : 0
+
+                const minProfit =
+                  Math.max(
+                    flashLoanFee,
+                    minimumProfitSafety,
+                  )
+
+                // ==================================================
+                // Profit Percentage
+                // ==================================================
+
                 const profitPercent =
                   loanAmountNumber > 0
                     ? (
@@ -323,15 +388,17 @@ import type {
                       ) * 100
                     : 0
 
-                const minProfit =
-                  Math.max(
-                    flashLoanFee,
-                    0.01,
-                  )
+                // ==================================================
+                // Profitability Check
+                // ==================================================
 
                 const isProfitable =
                   estimatedNetProfit >
                   minProfit
+
+                // ==================================================
+                // Diagnostics
+                // ==================================================
 
                 console.log(
                   '[LIVE SCANNER] ROUTE RESULT:',
@@ -364,7 +431,12 @@ import type {
                 )
 
                 console.log(
-                  '[LIVE SCANNER] Minimum profit:',
+                  '[LIVE SCANNER] Minimum profit safety floor:',
+                  minimumProfitSafety,
+                )
+
+                console.log(
+                  '[LIVE SCANNER] Minimum on-chain profit:',
                   minProfit,
                 )
 

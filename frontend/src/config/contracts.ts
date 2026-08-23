@@ -10,7 +10,7 @@ export const SEPOLIA_CHAIN_ID = 11155111
 // ======================================================
 
 export const EXECUTOR_CONTRACT_ADDRESS =
-  '0x3aE7c844CAe182bBb7dfe31CeE3C4C1B729160D2'
+  '0x33f10323b54A26a6b9e10B1279424508dB065d9d'
 
 // ======================================================
 // const UNISWAP_V3_QUOTER_V2_ADDRESS =
@@ -24,8 +24,16 @@ export const EXECUTOR_CONTRACT_ADDRESS =
 export const USDC_ADDRESS =
   '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8'
 
-//export const USDC_ADDRESS =
- //'0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
+// ======================================================
+// Circle Sepolia USDC
+//
+// This is the standalone Circle USDC shown by MetaMask.
+// It is NOT the Aave V3 Sepolia USDC used by the
+// flash-loan arbitrage system.
+// ======================================================
+
+export const CIRCLE_USDC_ADDRESS =
+  '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'
 
 // ======================================================
 // Sepolia WETH

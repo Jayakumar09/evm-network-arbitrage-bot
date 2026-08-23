@@ -335,43 +335,97 @@ function buildDexArbitrageParams(
   )
 }
 
+
 // ======================================================
 // Fetch ETH / USD Price
+// ======================================================
+//
+// Purpose:
+// - Fetch a live ETH/USD price for gas-cost accounting.
+// - Never allow price-provider failure to break a
+//   successfully confirmed blockchain transaction.
+// - Return 0 when the external price service is unavailable.
 // ======================================================
 
 async function getEthUsdPrice(): Promise<number> {
 
-  const response =
-    await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+  const PRICE_URL =
+    'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
+
+  try {
+
+    console.log(
+      '[ETH/USD DEBUG] Fetching ETH/USD price...',
     )
 
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch ETH/USD price: ${response.status}`,
-    )
-  }
+    const response =
+      await fetch(
+        PRICE_URL,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        },
+      )
 
-  const data =
-    await response.json()
+    if (!response.ok) {
 
-  const ethUsdPrice =
-    Number(
-      data?.ethereum?.usd,
-    )
+      console.warn(
+        '[ETH/USD DEBUG] Price provider returned:',
+        response.status,
+      )
 
-  if (
-    !Number.isFinite(
+      return 0
+    }
+
+    const data =
+      await response.json()
+
+    const ethUsdPrice =
+      Number(
+        data?.ethereum?.usd,
+      )
+
+    if (
+      !Number.isFinite(
+        ethUsdPrice,
+      ) ||
+      ethUsdPrice <= 0
+    ) {
+
+      console.warn(
+        '[ETH/USD DEBUG] Invalid ETH/USD response:',
+        data,
+      )
+
+      return 0
+    }
+
+    console.log(
+      '[ETH/USD DEBUG] ETH/USD price:',
       ethUsdPrice,
-    ) ||
-    ethUsdPrice <= 0
-  ) {
-    throw new Error(
-      'Invalid ETH/USD price received.',
     )
-  }
 
-  return ethUsdPrice
+    return ethUsdPrice
+
+  } catch (error) {
+
+    // --------------------------------------------------
+    // IMPORTANT:
+    //
+    // A price API failure must NEVER turn a successful
+    // blockchain transaction into a failed execution.
+    // --------------------------------------------------
+
+    console.warn(
+      '[ETH/USD DEBUG] Price lookup unavailable:',
+      error,
+    )
+
+    return 0
+  }
 }
 
 
@@ -1353,35 +1407,17 @@ function ExecutionPage() {
                   : 0
 
 
-              // ------------------------------------------------
+              // --------------------------------------------------
               // Fetch current ETH/USD price
-              // ------------------------------------------------
+              // --------------------------------------------------
 
-              let ethUsdPrice = 0
+              const ethUsdPrice =
+                await getEthUsdPrice()
 
-              try {
-
-                ethUsdPrice =
-                  await getEthUsdPrice()
-
-                console.log(
-                  '[TRANSACTION PROFIT] ETH/USD:',
-                  ethUsdPrice,
-                )
-
-              } catch (priceError) {
-
-                console.error(
-                  '[TRANSACTION PROFIT] Failed to fetch ETH/USD price:',
-                  priceError,
-                )
-
-                // ----------------------------------------------
-                // Do not invent a net-profit value.
-                // ----------------------------------------------
-
-                ethUsdPrice = 0
-              }
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] ETH/USD:',
+                ethUsdPrice,
+              )
 
 
               // ------------------------------------------------
@@ -1395,19 +1431,76 @@ function ExecutionPage() {
 
 
               // ------------------------------------------------
+              // Calculate Aave Premium
+              //
+              // arbitrageProfit returned by the Executor represents
+              // the swap profit:
+              //
+              //   swap2AmountOut - flashLoanAmount
+              //
+              // The Aave premium is a separate repayment cost and
+              // must therefore be deducted before calculating the
+              // true net profit.
+              // ------------------------------------------------
+
+              const aavePremiumUsdc =
+                Number(
+                  formatUnits(
+                    result.flashLoanPremium ?? 0n,
+                    6,
+                  ),
+                )
+
+
+              // ------------------------------------------------
+              // Calculate Net Profit Before Gas
+              //
+              // Gross arbitrage profit
+              // - Aave flash-loan premium
+              // ------------------------------------------------
+
+              const netBeforeGasUsdc =
+                grossProfitUsdc -
+                aavePremiumUsdc
+
+
+              // ------------------------------------------------
               // Calculate True Net Profit
               //
-              // Gross Profit:
-              //   Arbitrage profit before blockchain gas.
-              //
-              // Net Profit:
-              //   Gross profit - gas cost in USD.
+              // Net before gas
+              // - blockchain gas cost
               // ------------------------------------------------
 
               const netProfitUsdc =
                 ethUsdPrice > 0
-                  ? grossProfitUsdc - gasCostUsd
+                  ? netBeforeGasUsdc - gasCostUsd
                   : null
+
+
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] Gross Profit:',
+                grossProfitUsdc,
+              )
+
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] Aave Premium:',
+                aavePremiumUsdc,
+              )
+
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] Net Before Gas:',
+                netBeforeGasUsdc,
+              )
+
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] Gas Cost USD:',
+                gasCostUsd,
+              )
+
+              console.log(
+                '[TRANSACTION PROFIT DEBUG] FINAL Net Profit:',
+                netProfitUsdc,
+              )
 
 
               // ------------------------------------------------
@@ -2349,8 +2442,41 @@ function ExecutionPage() {
           <div className="flex items-center justify-between gap-4">
 
             <span className="text-sm text-slate-400">
-              Arbitrage Profit
+              Gross Arbitrage Profit
             </span>
+
+            <div className="flex items-center justify-between gap-4">
+
+              <span className="text-sm text-slate-400">
+                Aave Premium
+              </span>
+
+              <span className="text-sm font-semibold text-amber-400">
+                {formatUnits(
+                  flashLoanResult.flashLoanPremium ?? 0n,
+                  6,
+                )}{' '}
+                USDC
+              </span>
+
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+
+              <span className="text-sm text-slate-400">
+                Net Before Gas
+              </span>
+
+              <span className="text-sm font-semibold text-white">
+                {formatUnits(
+                  (flashLoanResult.arbitrageProfit ?? 0n) -
+                    (flashLoanResult.flashLoanPremium ?? 0n),
+                  6,
+                )}{' '}
+                USDC
+              </span>
+
+            </div>
 
             <span className="text-sm font-bold text-emerald-400">
               {formatUnits(

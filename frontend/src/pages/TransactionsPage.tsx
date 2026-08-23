@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react'
 
@@ -9,6 +10,7 @@ import {
 
 import {
   getStoredTransactions,
+  migrateHistoricalAavePremium,
   subscribeToTransactionUpdates,
 } from '../services/transactionHistory'
 
@@ -101,6 +103,7 @@ function formatAddress(
 
   return `${address.slice(0, 8)}...${address.slice(-6)}`
 }
+
 
 // ======================================================
 // Open Transaction On Sepolia Explorer
@@ -198,6 +201,63 @@ function saveEthWithdrawals(
     // Storage failure should not stop the page.
 
   }
+}
+
+
+// ======================================================
+// Transaction List Signature
+//
+// Used to prevent unnecessary React state updates.
+//
+// The transaction data is compared by its meaningful
+// fields instead of always replacing the state array.
+//
+// This prevents repeated:
+//
+// [TRANSACTION PAGE] Stored arbitrage transactions:
+// Array(7)
+//
+// updates when nothing actually changed.
+// ======================================================
+
+function getTransactionListSignature(
+  transactions: TransactionItem[],
+): string {
+
+  return JSON.stringify(
+    transactions.map(
+      (
+        transaction,
+      ) => ({
+        hash:
+          transaction.hash,
+
+        status:
+          transaction.status,
+
+        type:
+          transaction.type,
+
+        pair:
+          transaction.pair,
+
+        amount:
+          transaction.amount,
+
+        grossProfit:
+          transaction.grossProfit,
+
+        netProfit:
+          transaction.netProfit,
+
+        gas:
+          transaction.gas,
+
+        time:
+          transaction.time,
+      }),
+    ),
+  )
 }
 
 
@@ -410,11 +470,6 @@ function mergeEthWithdrawals(
   )
 
 
-  saveEthWithdrawals(
-    merged,
-  )
-
-
   return merged
 }
 
@@ -432,10 +487,7 @@ function TransactionsPage() {
   const [
     arbitrageTransactions,
     setArbitrageTransactions,
-  ] = useState<TransactionItem[]>(
-    () =>
-      getStoredTransactions(),
-  )
+  ] = useState<TransactionItem[]>([])
 
 
   // ====================================================
@@ -472,6 +524,51 @@ function TransactionsPage() {
 
 
   // ====================================================
+  // Latest State Refs
+  //
+  // IMPORTANT:
+  // The main useEffect intentionally runs once.
+  // Therefore callbacks created inside it must not rely
+  // on stale state captured during the first render.
+  // These refs always contain the latest arrays.
+  // ====================================================
+
+  const arbitrageTransactionsRef =
+    useRef<TransactionItem[]>(
+      arbitrageTransactions,
+    )
+
+  const ethWithdrawalsRef =
+    useRef<TransactionItem[]>(
+      ethWithdrawals,
+    )
+
+
+  // ====================================================
+  // Keep Refs Synchronized
+  // ====================================================
+
+  useEffect(() => {
+
+    arbitrageTransactionsRef.current =
+      arbitrageTransactions
+
+  }, [
+    arbitrageTransactions,
+  ])
+
+
+  useEffect(() => {
+
+    ethWithdrawalsRef.current =
+      ethWithdrawals
+
+  }, [
+    ethWithdrawals,
+  ])
+
+
+  // ====================================================
   // Automatic Transaction Refresh
   // ====================================================
 
@@ -483,23 +580,50 @@ function TransactionsPage() {
 
 
     // ==================================================
-    // Refresh Stored Arbitrage History
+    // Update Stored Arbitrage History
     // ==================================================
 
     const refreshStoredTransactions =
-      () => {
+      async () => {
 
         if (!mounted) {
           return
         }
 
+
         const storedTransactions =
-          getStoredTransactions()
+          await getStoredTransactions()
+
+
+        const currentSignature =
+          getTransactionListSignature(
+            arbitrageTransactionsRef.current,
+          )
+
+        const newSignature =
+          getTransactionListSignature(
+            storedTransactions,
+          )
+
+
+        if (
+          currentSignature ===
+          newSignature
+        ) {
+
+          return
+        }
+
 
         console.log(
-          '[TRANSACTION PAGE] Stored arbitrage transactions:',
+          '[TRANSACTION PAGE] Stored arbitrage transactions UPDATED:',
           storedTransactions,
         )
+
+
+        arbitrageTransactionsRef.current =
+          storedTransactions
+
 
         setArbitrageTransactions(
           storedTransactions,
@@ -508,37 +632,11 @@ function TransactionsPage() {
 
 
     // ==================================================
-    // Refresh All Transactions
+    // Update Executor ETH Withdrawals
     // ==================================================
 
-    async function refreshTransactions() {
-
-      // ------------------------------------------------
-      // Prevent overlapping refresh calls
-      // ------------------------------------------------
-
-      if (
-        refreshRunning
-      ) {
-        return
-      }
-
-      refreshRunning =
-        true
-
-
-      try {
-
-        // ----------------------------------------------
-        // Refresh arbitrage history
-        // ----------------------------------------------
-
-        refreshStoredTransactions()
-
-
-        // ----------------------------------------------
-        // Refresh Executor ETH withdrawals
-        // ----------------------------------------------
+    const refreshExecutorWithdrawals =
+      async () => {
 
         const blockchainWithdrawals =
           await getExecutorTransactions()
@@ -555,9 +653,100 @@ function TransactionsPage() {
           )
 
 
-        setEthWithdrawals(
-          mergedWithdrawals,
-        )
+        const currentSignature =
+          getTransactionListSignature(
+            ethWithdrawalsRef.current,
+          )
+
+        const newSignature =
+          getTransactionListSignature(
+            mergedWithdrawals,
+          )
+
+
+        if (
+          currentSignature !==
+          newSignature
+        ) {
+
+          console.log(
+            '[TRANSACTION PAGE] Executor ETH withdrawals UPDATED:',
+            mergedWithdrawals,
+          )
+
+
+          ethWithdrawalsRef.current =
+            mergedWithdrawals
+
+
+          setEthWithdrawals(
+            mergedWithdrawals,
+          )
+        }
+
+
+        // ------------------------------------------------
+        // Persist only when the stored list differs.
+        // ------------------------------------------------
+
+        const storedWithdrawals =
+          getStoredEthWithdrawals()
+
+
+        const storedSignature =
+          getTransactionListSignature(
+            storedWithdrawals,
+          )
+
+
+        if (
+          storedSignature !==
+          newSignature
+        ) {
+
+          saveEthWithdrawals(
+            mergedWithdrawals,
+          )
+        }
+      }
+
+
+    // ==================================================
+    // Refresh All Transactions
+    // ==================================================
+
+    async function refreshTransactions() {
+
+      if (
+        refreshRunning
+      ) {
+        return
+      }
+
+
+      refreshRunning =
+        true
+
+
+      try {
+
+        // ----------------------------------------------
+        // Refresh wallet-specific arbitrage history.
+        // ----------------------------------------------
+
+        void refreshStoredTransactions()
+
+
+        // ----------------------------------------------
+        // Refresh blockchain-backed Executor activity.
+        // ----------------------------------------------
+
+        await refreshExecutorWithdrawals()
+
+
+        if (!mounted) {
+          return
+        }
 
 
         setError('')
@@ -586,16 +775,30 @@ function TransactionsPage() {
 
 
         // ----------------------------------------------
-        // Keep stored data available
+        // Keep the last stored data visible if the
+        // blockchain API is temporarily unavailable.
         // ----------------------------------------------
 
+        const storedTransactions =
+          await getStoredTransactions()
+
+        const storedWithdrawals =
+          getStoredEthWithdrawals()
+
+
+        arbitrageTransactionsRef.current =
+          storedTransactions
+
+        ethWithdrawalsRef.current =
+          storedWithdrawals
+
+
         setArbitrageTransactions(
-          getStoredTransactions(),
+          storedTransactions,
         )
 
-
         setEthWithdrawals(
-          getStoredEthWithdrawals(),
+          storedWithdrawals,
         )
 
 
@@ -619,34 +822,34 @@ function TransactionsPage() {
     // Initial Refresh
     // ==================================================
 
-    refreshTransactions()
+    void (async () => {
+
+      await migrateHistoricalAavePremium()
+
+      await refreshTransactions()
+
+    })()
 
 
     // ==================================================
     // New Arbitrage Transaction Listener
-    //
-    // ExecutionPage:
-    //
-    // saveTransaction()
-    //        ↓
-    // localStorage
-    //        ↓
-    // executorTransactionUpdated
-    //        ↓
-    // this callback
-    //        ↓
-    // UI refresh
     // ==================================================
 
     const unsubscribe =
       subscribeToTransactionUpdates(
         () => {
 
+          if (!mounted) {
+            return
+          }
+
+
           console.log(
             '[TRANSACTION PAGE] New transaction update received.',
           )
 
-          refreshStoredTransactions()
+
+          void refreshStoredTransactions()
 
         },
       )
@@ -670,6 +873,16 @@ function TransactionsPage() {
     const handleWindowFocus =
       () => {
 
+        if (!mounted) {
+          return
+        }
+
+
+        console.log(
+          '[TRANSACTION PAGE] Browser focus detected.',
+        )
+
+
         refreshTransactions()
       }
 
@@ -692,6 +905,11 @@ function TransactionsPage() {
           'visible'
         ) {
 
+          console.log(
+            '[TRANSACTION PAGE] Page became visible.',
+          )
+
+
           refreshTransactions()
         }
       }
@@ -701,6 +919,242 @@ function TransactionsPage() {
       'visibilitychange',
       handleVisibilityChange,
     )
+
+
+    // ==================================================
+    // MetaMask Account / Network Changes
+    //
+    // transactionHistory.ts stores history by:
+    //
+    //     Network
+    //       +
+    //     Executor
+    //       +
+    //     Wallet
+    //
+    // Therefore an account change MUST immediately
+    // reload wallet-specific history.
+    //
+    // Account 1:
+    // 0x02cb851d094AE4648FB528F9E62095356cB214BE
+    //
+    // Test Account:
+    // 0x96E79e52f4404622E104007E61fe6e28BFd3F056
+    // ==================================================
+
+    const ethereum =
+      window.ethereum
+
+
+    // ==================================================
+    // MetaMask Account Changed
+    // ==================================================
+
+    const handleAccountsChanged =
+      (
+        accounts: string[],
+      ) => {
+
+        console.log(
+          '==================================================',
+        )
+
+        console.log(
+          '[TRANSACTION PAGE] MetaMask accountsChanged',
+        )
+
+        console.log(
+          '[TRANSACTION PAGE] New accounts:',
+          accounts,
+        )
+
+        console.log(
+          '==================================================',
+        )
+
+
+        // ------------------------------------------------
+        // MetaMask locked / disconnected.
+        // ------------------------------------------------
+
+        if (
+          accounts.length ===
+          0
+        ) {
+
+          console.log(
+            '[TRANSACTION PAGE] No MetaMask account connected.',
+          )
+
+
+          if (mounted) {
+
+            arbitrageTransactionsRef.current =
+              []
+
+            setArbitrageTransactions(
+              [],
+            )
+          }
+
+
+          return
+        }
+
+
+        // ------------------------------------------------
+        // Give MetaMask time to update selectedAddress.
+        // ------------------------------------------------
+
+        window.setTimeout(
+          async () => {
+
+            if (!mounted) {
+              return
+            }
+
+
+            console.log(
+              '[TRANSACTION PAGE] Reloading wallet-specific transaction history...',
+            )
+
+
+            const walletTransactions =
+              await getStoredTransactions()
+
+
+            console.log(
+              '[TRANSACTION PAGE] Wallet-specific transactions:',
+              walletTransactions,
+            )
+
+            console.log(
+              '[TRANSACTION PAGE] Wallet transaction count:',
+              walletTransactions.length,
+            )
+
+
+            // ------------------------------------------------
+            // Update the wallet-specific arbitrage list.
+            // ------------------------------------------------
+
+            arbitrageTransactionsRef.current =
+              walletTransactions
+
+
+            setArbitrageTransactions(
+              walletTransactions,
+            )
+
+
+            // ------------------------------------------------
+            // Refresh Executor blockchain activity as well.
+            // ------------------------------------------------
+
+            void refreshTransactions()
+
+          },
+          100,
+        )
+      }
+
+
+    // ==================================================
+    // MetaMask Network Changed
+    // ==================================================
+
+    const handleChainChanged =
+      (
+        chainId: string,
+      ) => {
+
+        console.log(
+          '==================================================',
+        )
+
+        console.log(
+          '[TRANSACTION PAGE] MetaMask chainChanged:',
+          chainId,
+        )
+
+        console.log(
+          '[TRANSACTION PAGE] Reloading transaction history...',
+        )
+
+        console.log(
+          '==================================================',
+        )
+
+
+        window.setTimeout(
+          async () => {
+
+            if (!mounted) {
+              return
+            }
+
+
+            console.log(
+              '[TRANSACTION PAGE] Reloading history after network change...',
+            )
+
+
+            const walletTransactions =
+              await getStoredTransactions()
+
+
+            console.log(
+              '[TRANSACTION PAGE] Transactions after network change:',
+              walletTransactions,
+            )
+
+
+            arbitrageTransactionsRef.current =
+              walletTransactions
+
+
+            setArbitrageTransactions(
+              walletTransactions,
+            )
+
+
+            void refreshTransactions()
+
+          },
+          100,
+        )
+      }
+
+
+    // ==================================================
+    // Register MetaMask Listeners
+    // ==================================================
+
+    if (
+      ethereum
+    ) {
+
+      console.log(
+        '[TRANSACTION PAGE] Registering MetaMask listeners...',
+      )
+
+
+      ethereum.on(
+        'accountsChanged',
+        handleAccountsChanged,
+      )
+
+
+      ethereum.on(
+        'chainChanged',
+        handleChainChanged,
+      )
+
+
+      console.log(
+        '[TRANSACTION PAGE] MetaMask listeners registered.',
+      )
+    }
 
 
     // ==================================================
@@ -731,8 +1185,34 @@ function TransactionsPage() {
         'visibilitychange',
         handleVisibilityChange,
       )
+
+
+      if (
+        ethereum
+      ) {
+
+        ethereum.removeListener(
+          'accountsChanged',
+          handleAccountsChanged,
+        )
+
+
+        ethereum.removeListener(
+          'chainChanged',
+          handleChainChanged,
+        )
+
+
+        console.log(
+          '[TRANSACTION PAGE] MetaMask listeners removed.',
+        )
+      }
     }
 
+
+    // The effect intentionally initializes the complete
+    // transaction listener/refresh system only once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
 
@@ -819,7 +1299,7 @@ function TransactionsPage() {
   const successfulTransactions =
     mergedTransactions.filter(
       (
-        transaction,
+        transaction: TransactionItem,
       ) =>
         transaction.status ===
         'SUCCESS',
@@ -837,7 +1317,7 @@ function TransactionsPage() {
     mergedTransactions.reduce(
       (
         total,
-        transaction,
+        transaction: TransactionItem,
       ) => {
 
         if (
@@ -874,8 +1354,6 @@ function TransactionsPage() {
       },
       0,
     )
-
-    
 
 
   // ====================================================
@@ -931,27 +1409,20 @@ function TransactionsPage() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
 
-        {/* Total Transactions */}
-
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Total Transactions
           </p>
 
-
           <p className="mt-2 text-2xl font-semibold text-white">
-
             {loading
               ? '...'
               : totalTransactions}
-
           </p>
 
         </div>
 
-
-        {/* Successful */}
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
@@ -959,26 +1430,20 @@ function TransactionsPage() {
             Successful
           </p>
 
-
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
-
             {loading
               ? '...'
               : successfulTransactions}
-
           </p>
 
         </div>
 
-
-        {/* Net Profit */}
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Total Net Profit
           </p>
-
 
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
             ${totalNetProfit.toFixed(2)}
@@ -987,14 +1452,11 @@ function TransactionsPage() {
         </div>
 
 
-        {/* Network */}
-
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Network
           </p>
-
 
           <p className="mt-2 text-lg font-semibold text-white">
             Ethereum Sepolia
@@ -1011,14 +1473,11 @@ function TransactionsPage() {
 
       <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
 
-        {/* Header */}
-
         <div className="border-b border-slate-800 px-6 py-5">
 
           <h2 className="text-lg font-semibold text-white">
             Transaction History
           </h2>
-
 
           <p className="mt-1 text-sm text-slate-400">
             Arbitrage execution results and Executor management transactions.
@@ -1090,68 +1549,54 @@ function TransactionsPage() {
                     className="border-b border-slate-800/70 last:border-0 hover:bg-slate-900/30"
                   >
 
-                    {/* Transaction */}
-
                     <td className="px-6 py-5">
 
                       <button
-                          type="button"
-                          onClick={() =>
-                            openTransactionOnExplorer(
-                              transaction.hash,
-                            )
-                          }
-                          className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
-                          title="View transaction on Sepolia Etherscan"
-                        >
-                          {formatAddress(
+                        type="button"
+                        onClick={() =>
+                          openTransactionOnExplorer(
                             transaction.hash,
-                          )}
-                        </button>
+                          )
+                        }
+                        className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
+                        title="View transaction on Sepolia Etherscan"
+                      >
+                        {formatAddress(
+                          transaction.hash,
+                        )}
+                      </button>
 
-                        <p className="mt-1 text-xs text-slate-600">
-                          View on Sepolia
-                        </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        View on Sepolia
+                      </p>
 
                     </td>
 
-
-                    {/* Pair / Type */}
 
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.pair}
                     </td>
 
 
-                    {/* Amount */}
-
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.amount}
                     </td>
 
-
-                    {/* Gross Profit */}
 
                     <td className="px-6 py-5 text-sm font-semibold text-white">
                       {transaction.grossProfit}
                     </td>
 
 
-                    {/* Net Profit */}
-
                     <td className="px-6 py-5 text-sm font-semibold text-emerald-400">
                       {transaction.netProfit}
                     </td>
 
 
-                    {/* Gas */}
-
                     <td className="px-6 py-5 text-sm text-white">
                       {transaction.gas}
                     </td>
 
-
-                    {/* Status */}
 
                     <td className="px-6 py-5">
 
@@ -1169,8 +1614,6 @@ function TransactionsPage() {
                     </td>
 
 
-                    {/* Time */}
-
                     <td className="whitespace-nowrap px-6 py-5 text-sm text-slate-300">
                       {transaction.time}
                     </td>
@@ -1179,8 +1622,6 @@ function TransactionsPage() {
                 ),
               )}
 
-
-              {/* Empty State */}
 
               {!loading &&
                 mergedTransactions.length === 0 && (
@@ -1195,7 +1636,6 @@ function TransactionsPage() {
                     <p className="text-sm font-medium text-slate-300">
                       No transactions found.
                     </p>
-
 
                     <p className="mt-2 text-xs text-slate-500">
                       Completed arbitrage executions will appear here automatically.
@@ -1231,20 +1671,18 @@ function TransactionsPage() {
                 className="rounded-lg border border-slate-800 bg-slate-900/40 p-4"
               >
 
-                {/* Header */}
-
                 <div className="flex items-center justify-between gap-3">
 
                   <button
-                      type="button"
-                      onClick={() =>
-                        openTransactionOnExplorer(
-                          transaction.hash,
-                        )
-                      }
-                      className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
-                      title="View transaction on Sepolia Etherscan"
-                    >
+                    type="button"
+                    onClick={() =>
+                      openTransactionOnExplorer(
+                        transaction.hash,
+                      )
+                    }
+                    className="font-mono text-sm text-emerald-400 hover:text-emerald-300 hover:underline"
+                    title="View transaction on Sepolia Etherscan"
+                  >
                     {formatAddress(
                       transaction.hash,
                     )}
@@ -1264,8 +1702,6 @@ function TransactionsPage() {
 
                 </div>
 
-
-                {/* Details */}
 
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
 
@@ -1353,8 +1789,6 @@ function TransactionsPage() {
           )}
 
 
-          {/* Mobile Empty State */}
-
           {!loading &&
             mergedTransactions.length === 0 && (
 
@@ -1363,7 +1797,6 @@ function TransactionsPage() {
               <p className="text-sm font-medium text-slate-300">
                 No transactions found.
               </p>
-
 
               <p className="mt-2 text-xs text-slate-500">
                 Completed arbitrage executions will appear here automatically.
