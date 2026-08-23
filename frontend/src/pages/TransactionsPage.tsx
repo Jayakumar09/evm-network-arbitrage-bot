@@ -6,6 +6,7 @@ import {
 
 import {
   formatEther,
+  formatUnits,
 } from 'ethers'
 
 import {
@@ -53,6 +54,52 @@ type BlockscoutTransaction = {
 
 
 // ======================================================
+// Blockscout Token Transfer Type
+//
+// Blockscout V2 exposes ERC20 transfers separately from
+// normal transactions.
+//
+// We use this endpoint to detect:
+//
+//     Executor -> Owner USDC
+//     Executor -> Owner WETH
+//
+// DEX swap transfers are intentionally ignored because
+// the recipient must be the currently connected wallet.
+// ======================================================
+
+type BlockscoutTokenTransfer = {
+  transaction_hash?: string
+  hash?: string
+
+  timestamp?: string
+
+  from?: {
+    hash?: string
+  }
+
+  to?: {
+    hash?: string
+  } | null
+
+  token?: {
+    address?: string
+    symbol?: string
+    name?: string
+    decimals?: number | string
+  }
+
+  total?: {
+    value?: string
+    decimals?: number | string
+  }
+
+  value?: string
+  decimals?: number | string
+}
+
+
+// ======================================================
 // Blockscout Response
 // ======================================================
 
@@ -62,7 +109,25 @@ type BlockscoutResponse = {
 
 
 // ======================================================
+// Blockscout Token Transfer Response
+// ======================================================
+
+type BlockscoutTokenTransferResponse = {
+  items?: BlockscoutTokenTransfer[]
+}
+
+
+// ======================================================
 // Storage
+// ======================================================
+//
+// Existing key is intentionally preserved so previously
+// detected ETH withdrawal records are not lost.
+//
+// The key now stores all Executor withdrawal records:
+//     ETH
+//     USDC
+//     WETH
 // ======================================================
 
 const ETH_WITHDRAWAL_STORAGE_KEY =
@@ -146,10 +211,86 @@ function formatTransactionTime(
 
 
 // ======================================================
-// Read Stored ETH Withdrawals
+// Read Connected Wallet
+//
+// This is a silent read.
+//
+// It NEVER calls eth_requestAccounts().
+//
+// selectedAddress is preferred because it is immediately
+// available after the wallet connection is established.
+// eth_accounts is used as a silent fallback.
 // ======================================================
 
-function getStoredEthWithdrawals():
+async function getConnectedWalletAddress():
+  Promise<string | null> {
+
+  try {
+
+    const ethereum =
+      window.ethereum as
+      | {
+          selectedAddress?: string | null
+          request?: (
+            args: {
+              method: string
+            },
+          ) => Promise<unknown>
+        }
+      | undefined
+
+
+    const selectedAddress =
+      ethereum?.selectedAddress
+
+
+    if (
+      selectedAddress
+    ) {
+
+      return selectedAddress.toLowerCase()
+    }
+
+
+    if (
+      ethereum?.request
+    ) {
+
+      const accounts =
+        await ethereum.request({
+          method:
+            'eth_accounts',
+        })
+
+
+      if (
+        Array.isArray(accounts) &&
+        typeof accounts[0] ===
+          'string'
+      ) {
+
+        return accounts[0].toLowerCase()
+      }
+    }
+
+  } catch (error) {
+
+    console.warn(
+      '[TRANSACTION PAGE] Unable to read connected wallet:',
+      error,
+    )
+  }
+
+
+  return null
+}
+
+
+// ======================================================
+// Read Stored Executor Withdrawals
+// ======================================================
+
+function getStoredExecutorWithdrawals():
   TransactionItem[] {
 
   try {
@@ -180,10 +321,10 @@ function getStoredEthWithdrawals():
 
 
 // ======================================================
-// Save ETH Withdrawals
+// Save Executor Withdrawals
 // ======================================================
 
-function saveEthWithdrawals(
+function saveExecutorWithdrawals(
   transactions: TransactionItem[],
 ): void {
 
@@ -211,13 +352,6 @@ function saveEthWithdrawals(
 //
 // The transaction data is compared by its meaningful
 // fields instead of always replacing the state array.
-//
-// This prevents repeated:
-//
-// [TRANSACTION PAGE] Stored arbitrage transactions:
-// Array(7)
-//
-// updates when nothing actually changed.
 // ======================================================
 
 function getTransactionListSignature(
@@ -262,57 +396,300 @@ function getTransactionListSignature(
 
 
 // ======================================================
-// Read Executor ETH Transactions
+// Format ERC20 Amount
+// ======================================================
+
+function formatTokenAmount(
+  value: string,
+  decimals: number,
+): string {
+
+  try {
+
+    return formatUnits(
+      BigInt(value),
+      decimals,
+    )
+
+  } catch {
+
+    return '0'
+  }
+}
+
+
+// ======================================================
+// Read Token Transfer Amount
+// ======================================================
+
+function getTokenTransferAmount(
+  transfer:
+    BlockscoutTokenTransfer,
+): string {
+
+  const rawValue =
+    transfer.total?.value ??
+    transfer.value
+
+
+  if (
+    !rawValue
+  ) {
+    return '0'
+  }
+
+
+  const rawDecimals =
+    transfer.total?.decimals ??
+    transfer.token?.decimals ??
+    transfer.decimals ??
+    18
+
+
+  const decimals =
+    Number(
+      rawDecimals,
+    )
+
+
+  if (
+    !Number.isInteger(
+      decimals,
+    ) ||
+    decimals < 0
+  ) {
+
+    return '0'
+  }
+
+
+  return formatTokenAmount(
+    rawValue,
+    decimals,
+  )
+}
+
+
+// ======================================================
+// Detect Token Withdrawal
 //
-// Detect native ETH transactions SENT FROM the Executor.
-// These represent ETH withdrawals / management activity.
+// Only USDC and WETH transfers are included.
 //
-// Normal contract calls with value = 0 are ignored.
+// IMPORTANT:
+// We require:
+//
+//     from = Executor
+//     to   = Connected Owner Wallet
+//
+// This prevents normal arbitrage swap transfers from
+// appearing as withdrawals.
+// ======================================================
+
+function createTokenWithdrawal(
+  transfer:
+    BlockscoutTokenTransfer,
+  executorAddress:
+    string,
+  ownerWallet:
+    string,
+): TransactionItem | null {
+
+  const hash =
+    transfer.transaction_hash ??
+    transfer.hash
+
+
+  if (
+    !hash
+  ) {
+    return null
+  }
+
+
+  const fromAddress =
+    transfer.from?.hash?.toLowerCase()
+
+
+  const toAddress =
+    transfer.to?.hash?.toLowerCase()
+
+
+  if (
+    fromAddress !==
+    executorAddress
+  ) {
+    return null
+  }
+
+
+  if (
+    toAddress !==
+    ownerWallet
+  ) {
+    return null
+  }
+
+
+  const symbol =
+    (
+      transfer.token?.symbol ??
+      ''
+    ).toUpperCase()
+
+
+  if (
+    symbol !==
+      'USDC' &&
+    symbol !==
+      'WETH'
+  ) {
+
+    return null
+  }
+
+
+  const amount =
+    getTokenTransferAmount(
+      transfer,
+    )
+
+
+  const timestamp =
+    transfer.timestamp
+
+
+  if (
+    !timestamp
+  ) {
+    return null
+  }
+
+
+  return {
+
+    hash,
+
+    status:
+      'SUCCESS',
+
+    type:
+      'TOKEN_WITHDRAWAL',
+
+    pair:
+      `Executor → ${symbol} Withdrawal`,
+
+    amount:
+      `${amount} ${symbol}`,
+
+    grossProfit:
+      '—',
+
+    netProfit:
+      '—',
+
+    gas:
+      '—',
+
+    time:
+      formatTransactionTime(
+        timestamp,
+      ),
+
+    from:
+      fromAddress,
+
+    to:
+      toAddress,
+
+  }
+}
+
+
+// ======================================================
+// Read Executor Withdrawals
+//
+// Detects:
+//
+// 1. Native ETH sent from Executor to Owner.
+// 2. USDC sent from Executor to Owner.
+// 3. WETH sent from Executor to Owner.
+//
+// The recipient filter is critical. Without it, normal
+// arbitrage swap transfers from Executor to DEX contracts
+// would incorrectly appear as withdrawals.
 // ======================================================
 
 async function getExecutorTransactions():
   Promise<TransactionItem[]> {
 
-  const url =
-    `${BLOCKSCOUT_API_URL}/${EXECUTOR_CONTRACT_ADDRESS}/transactions`
-
-  const response =
-    await fetch(url)
-
-  if (!response.ok) {
-
-    throw new Error(
-      `Transaction history request failed: ${response.status}`,
-    )
-  }
-
-  const data:
-    BlockscoutResponse =
-    await response.json()
-
-  const items =
-    Array.isArray(data.items)
-      ? data.items
-      : []
-
-  const withdrawals:
-    TransactionItem[] = []
-
   const executorAddress =
     EXECUTOR_CONTRACT_ADDRESS.toLowerCase()
 
 
-  // ----------------------------------------------------
-  // Find native ETH withdrawals FROM Executor
-  // ----------------------------------------------------
+  const ownerWallet =
+    await getConnectedWalletAddress()
 
-  for (
-    const transaction of items
+
+  if (
+    !ownerWallet
   ) {
 
-    // ----------------------------------------------
-    // Only successful transactions
-    // ----------------------------------------------
+    console.log(
+      '[TRANSACTION PAGE] No connected wallet. Executor withdrawal scan skipped.',
+    )
+
+    return []
+  }
+
+
+  // ====================================================
+  // Native ETH Transactions
+  // ====================================================
+
+  const transactionsUrl =
+    `${BLOCKSCOUT_API_URL}/${EXECUTOR_CONTRACT_ADDRESS}/transactions`
+
+
+  const transactionsResponse =
+    await fetch(
+      transactionsUrl,
+    )
+
+
+  if (
+    !transactionsResponse.ok
+  ) {
+
+    throw new Error(
+      `Executor transaction history request failed: ${transactionsResponse.status}`,
+    )
+  }
+
+
+  const transactionData:
+    BlockscoutResponse =
+    await transactionsResponse.json()
+
+
+  const transactionItems =
+    Array.isArray(
+      transactionData.items,
+    )
+      ? transactionData.items
+      : []
+
+
+  const withdrawals:
+    TransactionItem[] = []
+
+
+  for (
+    const transaction of transactionItems
+  ) {
+
+    // --------------------------------------------------
+    // Only successful transactions.
+    // --------------------------------------------------
 
     if (
       transaction.status !==
@@ -322,9 +699,9 @@ async function getExecutorTransactions():
     }
 
 
-    // ----------------------------------------------
-    // Ignore zero-value transactions
-    // ----------------------------------------------
+    // --------------------------------------------------
+    // Ignore zero-value transactions.
+    // --------------------------------------------------
 
     if (
       !transaction.value ||
@@ -338,9 +715,13 @@ async function getExecutorTransactions():
       transaction.from?.hash?.toLowerCase()
 
 
-    // ----------------------------------------------
-    // Must originate from Executor
-    // ----------------------------------------------
+    const toAddress =
+      transaction.to?.hash?.toLowerCase()
+
+
+    // --------------------------------------------------
+    // Must originate from Executor.
+    // --------------------------------------------------
 
     if (
       fromAddress !==
@@ -350,12 +731,37 @@ async function getExecutorTransactions():
     }
 
 
-    const ethAmount =
-      formatEther(
-        BigInt(
-          transaction.value,
-        ),
-      )
+    // --------------------------------------------------
+    // Must go to the connected Owner wallet.
+    //
+    // This prevents unrelated native ETH management
+    // transactions from being listed as withdrawals.
+    // --------------------------------------------------
+
+    if (
+      toAddress !==
+      ownerWallet
+    ) {
+      continue
+    }
+
+
+    let ethAmount:
+      string
+
+    try {
+
+      ethAmount =
+        formatEther(
+          BigInt(
+            transaction.value,
+          ),
+        )
+
+    } catch {
+
+      continue
+    }
 
 
     withdrawals.push({
@@ -389,8 +795,108 @@ async function getExecutorTransactions():
           transaction.timestamp,
         ),
 
+      from:
+        fromAddress,
+
+      to:
+        toAddress,
+
     })
   }
+
+
+  // ====================================================
+  // ERC20 Token Transfers
+  // ====================================================
+
+  const tokenTransfersUrl =
+    `${BLOCKSCOUT_API_URL}/${EXECUTOR_CONTRACT_ADDRESS}/token-transfers`
+
+
+  const tokenTransfersResponse =
+    await fetch(
+      tokenTransfersUrl,
+    )
+
+
+  if (
+    tokenTransfersResponse.ok
+  ) {
+
+    const tokenTransferData:
+      BlockscoutTokenTransferResponse =
+      await tokenTransfersResponse.json()
+
+
+    const tokenTransfers =
+      Array.isArray(
+        tokenTransferData.items,
+      )
+        ? tokenTransferData.items
+        : []
+
+
+    for (
+      const transfer of tokenTransfers
+    ) {
+
+      const withdrawal =
+        createTokenWithdrawal(
+          transfer,
+          executorAddress,
+          ownerWallet,
+        )
+
+
+      if (
+        withdrawal
+      ) {
+
+        withdrawals.push(
+          withdrawal,
+        )
+      }
+    }
+
+  } else {
+
+    // --------------------------------------------------
+    // Token history is best-effort.
+    //
+    // If Blockscout temporarily rejects the token
+    // transfer endpoint, native ETH history can still
+    // be displayed.
+    // --------------------------------------------------
+
+    console.warn(
+      '[TRANSACTION PAGE] Token transfer history unavailable:',
+      tokenTransfersResponse.status,
+    )
+  }
+
+
+  // ====================================================
+  // Newest First
+  // ====================================================
+
+  withdrawals.sort(
+    (
+      transactionA,
+      transactionB,
+    ) =>
+      new Date(
+        transactionB.time,
+      ).getTime() -
+      new Date(
+        transactionA.time,
+      ).getTime(),
+  )
+
+
+  console.log(
+    '[TRANSACTION PAGE] Executor withdrawals detected:',
+    withdrawals,
+  )
 
 
   return withdrawals
@@ -398,16 +904,16 @@ async function getExecutorTransactions():
 
 
 // ======================================================
-// Merge And Deduplicate ETH Withdrawals
+// Merge And Deduplicate Executor Withdrawals
 // ======================================================
 
-function mergeEthWithdrawals(
+function mergeExecutorWithdrawals(
   blockchainWithdrawals:
     TransactionItem[],
 ): TransactionItem[] {
 
   const storedWithdrawals =
-    getStoredEthWithdrawals()
+    getStoredExecutorWithdrawals()
 
 
   const allWithdrawals =
@@ -452,10 +958,6 @@ function mergeEthWithdrawals(
     )
 
 
-  // ----------------------------------------------------
-  // Newest first
-  // ----------------------------------------------------
-
   merged.sort(
     (
       transactionA,
@@ -491,15 +993,15 @@ function TransactionsPage() {
 
 
   // ====================================================
-  // Executor ETH Withdrawals
+  // Executor Withdrawals
   // ====================================================
 
   const [
-    ethWithdrawals,
-    setEthWithdrawals,
+    executorWithdrawals,
+    setExecutorWithdrawals,
   ] = useState<TransactionItem[]>(
     () =>
-      getStoredEthWithdrawals(),
+      getStoredExecutorWithdrawals(),
   )
 
 
@@ -538,9 +1040,9 @@ function TransactionsPage() {
       arbitrageTransactions,
     )
 
-  const ethWithdrawalsRef =
+  const executorWithdrawalsRef =
     useRef<TransactionItem[]>(
-      ethWithdrawals,
+      executorWithdrawals,
     )
 
 
@@ -560,11 +1062,11 @@ function TransactionsPage() {
 
   useEffect(() => {
 
-    ethWithdrawalsRef.current =
-      ethWithdrawals
+    executorWithdrawalsRef.current =
+      executorWithdrawals
 
   }, [
-    ethWithdrawals,
+    executorWithdrawals,
   ])
 
 
@@ -648,14 +1150,14 @@ function TransactionsPage() {
 
 
         const mergedWithdrawals =
-          mergeEthWithdrawals(
+          mergeExecutorWithdrawals(
             blockchainWithdrawals,
           )
 
 
         const currentSignature =
           getTransactionListSignature(
-            ethWithdrawalsRef.current,
+            executorWithdrawalsRef.current,
           )
 
         const newSignature =
@@ -670,16 +1172,16 @@ function TransactionsPage() {
         ) {
 
           console.log(
-            '[TRANSACTION PAGE] Executor ETH withdrawals UPDATED:',
+            '[TRANSACTION PAGE] Executor withdrawals UPDATED:',
             mergedWithdrawals,
           )
 
 
-          ethWithdrawalsRef.current =
+          executorWithdrawalsRef.current =
             mergedWithdrawals
 
 
-          setEthWithdrawals(
+          setExecutorWithdrawals(
             mergedWithdrawals,
           )
         }
@@ -690,7 +1192,7 @@ function TransactionsPage() {
         // ------------------------------------------------
 
         const storedWithdrawals =
-          getStoredEthWithdrawals()
+          getStoredExecutorWithdrawals()
 
 
         const storedSignature =
@@ -704,7 +1206,7 @@ function TransactionsPage() {
           newSignature
         ) {
 
-          saveEthWithdrawals(
+          saveExecutorWithdrawals(
             mergedWithdrawals,
           )
         }
@@ -783,13 +1285,13 @@ function TransactionsPage() {
           await getStoredTransactions()
 
         const storedWithdrawals =
-          getStoredEthWithdrawals()
+          getStoredExecutorWithdrawals()
 
 
         arbitrageTransactionsRef.current =
           storedTransactions
 
-        ethWithdrawalsRef.current =
+        executorWithdrawalsRef.current =
           storedWithdrawals
 
 
@@ -797,7 +1299,7 @@ function TransactionsPage() {
           storedTransactions,
         )
 
-        setEthWithdrawals(
+        setExecutorWithdrawals(
           storedWithdrawals,
         )
 
@@ -1223,7 +1725,7 @@ function TransactionsPage() {
   const transactions =
     [
       ...arbitrageTransactions,
-      ...ethWithdrawals,
+      ...executorWithdrawals,
     ]
 
 

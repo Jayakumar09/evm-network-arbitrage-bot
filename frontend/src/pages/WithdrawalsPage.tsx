@@ -127,201 +127,227 @@ function WithdrawalsPage() {
   // Load Balances / Access
   // ====================================================
 
-  useEffect(() => {
+    useEffect(() => {
 
-    let mounted = true
-    let refreshInProgress = false
+      let mounted = true
+      let refreshInProgress = false
 
-    async function refresh(
-      source = 'UNKNOWN',
-      showLoading = false,
-    ) {
+      async function refresh(
+        showLoading = false,
+      ) {
 
-      if (refreshInProgress) {
-        console.log(
-          '[WITHDRAW DEBUG] Refresh skipped - previous refresh still running.',
-        )
+        // Prevent overlapping refresh calls silently.
+        if (refreshInProgress) {
+          return
+        }
 
-        return
+        refreshInProgress = true
+
+        try {
+
+          if (!mounted) {
+            return
+          }
+
+          if (showLoading) {
+            setLoading(true)
+          }
+
+          // ------------------------------------------------
+          // Wallet / owner / paused status
+          // ------------------------------------------------
+
+          const [
+            wallet,
+            owner,
+            paused,
+          ] = await Promise.all([
+            getConnectedWalletAddress(),
+            getExecutorOwner(),
+            getExecutorPaused(),
+          ])
+
+          if (!mounted) {
+            return
+          }
+
+          setConnectedWallet(wallet)
+          setIsPaused(paused)
+
+          setIsOwner(
+            wallet !== null &&
+            wallet.toLowerCase() ===
+              owner.toLowerCase(),
+          )
+
+          // ------------------------------------------------
+          // No connected wallet
+          // ------------------------------------------------
+
+          if (!wallet) {
+
+            setExecutorEthBalance('0.000000')
+            setExecutorUsdcBalance('0.00')
+            setExecutorWethBalance('0.000000')
+
+            setWalletEthBalance('0.000000')
+            setWalletUsdcBalance('0.00')
+            setWalletCircleUsdcBalance('0.00')
+            setWalletWethBalance('0.000000')
+
+            return
+          }
+
+          // ------------------------------------------------
+          // Read Executor + Wallet balances
+          // ------------------------------------------------
+
+          const [
+            executorEth,
+            executorUsdc,
+            executorWeth,
+            walletEth,
+            walletUsdc,
+            walletCircleUsdc,
+            walletWeth,
+          ] = await Promise.all([
+            getExecutorETHBalance(),
+            getExecutorUSDCBalance(),
+            getExecutorWETHBalance(),
+            getWalletETHBalance(),
+            getWalletUSDCBalance(),
+            getWalletCircleUSDCBalance(),
+            getWalletWETHBalance(),
+          ])
+
+          if (!mounted) {
+            return
+          }
+
+          setExecutorEthBalance(
+            Number(executorEth).toFixed(6),
+          )
+
+          setExecutorUsdcBalance(
+            Number(executorUsdc).toFixed(2),
+          )
+
+          setExecutorWethBalance(
+            Number(executorWeth).toFixed(6),
+          )
+
+          setWalletEthBalance(
+            Number(walletEth).toFixed(6),
+          )
+
+          setWalletUsdcBalance(
+            Number(walletUsdc).toFixed(2),
+          )
+
+          setWalletCircleUsdcBalance(
+            Number(walletCircleUsdc).toFixed(2),
+          )
+
+          setWalletWethBalance(
+            Number(walletWeth).toFixed(6),
+          )
+
+        } catch (error) {
+
+          // Only genuine refresh failures are logged.
+          console.error(
+            '[WITHDRAW ERROR] Balance refresh failed:',
+            error,
+          )
+
+        } finally {
+
+          refreshInProgress = false
+
+          if (
+            mounted &&
+            showLoading
+          ) {
+            setLoading(false)
+          }
+        }
       }
 
-      refreshInProgress = true
+      // --------------------------------------------------
+      // Initial load
+      // --------------------------------------------------
 
-      console.log(
-        '====================================================',
-      )
+      refresh(true)
 
-      console.log(
-        `[WITHDRAW DEBUG] Refresh START - source: ${source}`,
-      )
+      // --------------------------------------------------
+      // Automatic balance refresh every 5 seconds
+      // Silent unless an actual error occurs.
+      // --------------------------------------------------
 
-      try {
+      const refreshInterval =
+        window.setInterval(
+          () => {
+            refresh()
+          },
+          5000,
+        )
 
-        if (!mounted) {
-          return
+      // --------------------------------------------------
+      // MetaMask events
+      // --------------------------------------------------
+
+      const ethereum =
+        window.ethereum
+
+      if (!ethereum) {
+
+        return () => {
+
+          mounted = false
+
+          window.clearInterval(
+            refreshInterval,
+          )
         }
-
-        if (showLoading) {
-          setLoading(true)
-        }
-
-
-        // ------------------------------------------------
-        // Wallet / owner / paused status
-        // ------------------------------------------------
-
-        const [
-          wallet,
-          owner,
-          paused,
-        ] = await Promise.all([
-          getConnectedWalletAddress(),
-          getExecutorOwner(),
-          getExecutorPaused(),
-        ])
-
-
-        if (!mounted) {
-              return
-            }
-
-            setConnectedWallet(wallet)
-            setIsPaused(paused)
-
-            setIsOwner(
-              wallet !== null &&
-              wallet.toLowerCase() ===
-                owner.toLowerCase(),
-            )
-
-
-        if (!wallet) {
-
-          setExecutorEthBalance('0.000000')
-          setExecutorUsdcBalance('0.00')
-          setExecutorWethBalance('0.000000')
-
-          setWalletEthBalance('0.000000')
-          setWalletUsdcBalance('0.00')
-          setWalletCircleUsdcBalance('0.00')
-          setWalletWethBalance('0.000000')
-
-          return
-        }
-
-
-        // ------------------------------------------------
-        // Read Executor + wallet balances
-        // ------------------------------------------------
-
-        const [
-          executorEth,
-          executorUsdc,          
-          executorWeth,
-          walletEth,
-          walletUsdc,
-          walletCircleUsdc,
-          walletWeth,
-        ] = await Promise.all([
-          getExecutorETHBalance(),
-          getExecutorUSDCBalance(),
-          getExecutorWETHBalance(),
-          getWalletETHBalance(),
-          getWalletUSDCBalance(),
-          getWalletCircleUSDCBalance(),
-          getWalletWETHBalance(),
-        ])
-
-
-        if (!mounted) {
-          return
-        }
-
-
-        setExecutorEthBalance(
-          Number(executorEth).toFixed(6),
-        )
-
-        setExecutorUsdcBalance(
-          Number(executorUsdc).toFixed(2),
-        )
-
-        setExecutorWethBalance(
-          Number(executorWeth).toFixed(6),
-        )
-
-        setWalletEthBalance(
-          Number(walletEth).toFixed(6),
-        )
-
-        setWalletUsdcBalance(
-          Number(walletUsdc).toFixed(2),
-        )
-
-        setWalletCircleUsdcBalance(
-          Number(walletCircleUsdc).toFixed(2),
-        )
-
-        setWalletWethBalance(
-          Number(walletWeth).toFixed(6),
-        )
-
-        console.log(
-          '[WITHDRAW DEBUG] Balances refreshed.',
-        )
-
-      } catch (error) {
-
-        console.error(
-          '[WITHDRAW DEBUG] Refresh failed:',
-          error,
-        )
-
-      } finally {
-
-        refreshInProgress = false
-
-        if (
-          mounted &&
-          showLoading
-        ) {
-          setLoading(false)
-        }
-
-        console.log(
-          `[WITHDRAW DEBUG] Refresh END - source: ${source}`,
-        )
       }
-    }
 
-
-    refresh(
-      'INITIAL_LOAD',
-      true,
-    )
-
-
-    // --------------------------------------------------
-    // Automatic refresh every 5 seconds
-    // --------------------------------------------------
-
-    const refreshInterval =
-      window.setInterval(
+      const handleAccountsChanged =
         () => {
-          refresh('AUTO_REFRESH')
-        },
-        5000,
+          refresh()
+        }
+
+      const handleChainChanged =
+        () => {
+          refresh()
+        }
+
+      ethereum.on(
+        'accountsChanged',
+        handleAccountsChanged,
       )
 
+      ethereum.on(
+        'chainChanged',
+        handleChainChanged,
+      )
 
-    // --------------------------------------------------
-    // MetaMask events
-    // --------------------------------------------------
+      // --------------------------------------------------
+      // Refresh when browser window becomes active
+      // --------------------------------------------------
 
-    const ethereum =
-      window.ethereum
+      const handleWindowFocus =
+        () => {
+          refresh()
+        }
 
-    if (!ethereum) {
+      window.addEventListener(
+        'focus',
+        handleWindowFocus,
+      )
+
+      // --------------------------------------------------
+      // Cleanup
+      // --------------------------------------------------
 
       return () => {
 
@@ -330,74 +356,24 @@ function WithdrawalsPage() {
         window.clearInterval(
           refreshInterval,
         )
-      }
-    }
 
+        ethereum.removeListener(
+          'accountsChanged',
+          handleAccountsChanged,
+        )
 
-    const handleAccountsChanged =
-      () => {
-        refresh(
-          'METAMASK_ACCOUNT_CHANGED',
+        ethereum.removeListener(
+          'chainChanged',
+          handleChainChanged,
+        )
+
+        window.removeEventListener(
+          'focus',
+          handleWindowFocus,
         )
       }
 
-
-    const handleChainChanged =
-      () => {
-        refresh(
-          'METAMASK_CHAIN_CHANGED',
-        )
-      }
-
-
-    ethereum.on(
-      'accountsChanged',
-      handleAccountsChanged,
-    )
-
-    ethereum.on(
-      'chainChanged',
-      handleChainChanged,
-    )
-
-
-    const handleWindowFocus =
-      () => {
-        refresh('WINDOW_FOCUS')
-      }
-
-
-    window.addEventListener(
-      'focus',
-      handleWindowFocus,
-    )
-
-
-    return () => {
-
-      mounted = false
-
-      window.clearInterval(
-        refreshInterval,
-      )
-
-      ethereum.removeListener(
-        'accountsChanged',
-        handleAccountsChanged,
-      )
-
-      ethereum.removeListener(
-        'chainChanged',
-        handleChainChanged,
-      )
-
-      window.removeEventListener(
-        'focus',
-        handleWindowFocus,
-      )
-    }
-
-  }, [])
+    }, [])
 
 
   // ====================================================
@@ -664,59 +640,64 @@ function WithdrawalsPage() {
   // Refresh After Action
   // ====================================================
 
-  async function refreshPageBalances() {
+    async function refreshPageBalances() {
 
-    try {
+      try {
 
-      const [
-        executorEth,
-        executorUsdc,
-        executorWeth,
-        walletEth,
-        walletUsdc,
-        walletWeth,
-      ] = await Promise.all([
-        getExecutorETHBalance(),
-        getExecutorUSDCBalance(),
-        getExecutorWETHBalance(),
-        getWalletETHBalance(),
-        getWalletUSDCBalance(),
-        getWalletWETHBalance(),
-      ])
+        const [
+          executorEth,
+          executorUsdc,
+          executorWeth,
+          walletEth,
+          walletUsdc,
+          walletCircleUsdc,
+          walletWeth,
+        ] = await Promise.all([
+          getExecutorETHBalance(),
+          getExecutorUSDCBalance(),
+          getExecutorWETHBalance(),
+          getWalletETHBalance(),
+          getWalletUSDCBalance(),
+          getWalletCircleUSDCBalance(),
+          getWalletWETHBalance(),
+        ])
 
+        setExecutorEthBalance(
+          Number(executorEth).toFixed(6),
+        )
 
-      setExecutorEthBalance(
-        Number(executorEth).toFixed(6),
-      )
+        setExecutorUsdcBalance(
+          Number(executorUsdc).toFixed(2),
+        )
 
-      setExecutorUsdcBalance(
-        Number(executorUsdc).toFixed(2),
-      )
+        setExecutorWethBalance(
+          Number(executorWeth).toFixed(6),
+        )
 
-      setExecutorWethBalance(
-        Number(executorWeth).toFixed(6),
-      )
+        setWalletEthBalance(
+          Number(walletEth).toFixed(6),
+        )
 
-      setWalletEthBalance(
-        Number(walletEth).toFixed(6),
-      )
+        setWalletUsdcBalance(
+          Number(walletUsdc).toFixed(2),
+        )
 
-      setWalletUsdcBalance(
-        Number(walletUsdc).toFixed(2),
-      )
+        setWalletCircleUsdcBalance(
+          Number(walletCircleUsdc).toFixed(2),
+        )
 
-      setWalletWethBalance(
-        Number(walletWeth).toFixed(6),
-      )
+        setWalletWethBalance(
+          Number(walletWeth).toFixed(6),
+        )
 
-    } catch (error) {
+      } catch (error) {
 
-      console.error(
-        '[WITHDRAW DEBUG] Failed to refresh balances after action:',
-        error,
-      )
+        console.error(
+          '[WITHDRAW ERROR] Failed to refresh balances after action:',
+          error,
+        )
+      }
     }
-  }
 
 
   // ====================================================
