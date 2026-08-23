@@ -25,6 +25,16 @@ import {
 
 import { ERC20_ABI } from '../abi/erc20'
 
+const BLOCKCHAIN_DEBUG = false
+
+function blockchainLog(
+  ...args: unknown[]
+) {
+  if (BLOCKCHAIN_DEBUG) {
+    console.log(...args)
+  }
+}
+
 // ======================================================
 // MetaMask Provider Type
 // ======================================================
@@ -146,20 +156,20 @@ export async function withdrawExecutorETH(
         to: string,
       ): Promise<string> {
 
-        console.log(
+        blockchainLog(
           '========================================',
         )
 
-        console.log(
+        blockchainLog(
           '[CONTRACT DEBUG] ERC20 withdrawal START',
         )
 
-        console.log(
+        blockchainLog(
           '[CONTRACT DEBUG] Token:',
           tokenAddress,
         )
 
-        console.log(
+        blockchainLog(
           '[CONTRACT DEBUG] Recipient:',
           to,
         )
@@ -175,7 +185,7 @@ export async function withdrawExecutorETH(
           const signerAddress =
             await signer.getAddress()
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] Withdrawal signer:',
             signerAddress,
           )
@@ -187,7 +197,7 @@ export async function withdrawExecutorETH(
               signer,
             )
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] Calling withdrawToken()...',
           )
 
@@ -197,7 +207,7 @@ export async function withdrawExecutorETH(
               to,
             )
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] ERC20 withdrawal transaction:',
             transaction.hash,
           )
@@ -209,16 +219,16 @@ export async function withdrawExecutorETH(
           const receipt =
             await transaction.wait()
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] ERC20 withdrawal confirmed:',
             receipt?.hash ?? transaction.hash,
           )
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] ERC20 withdrawal END',
           )
 
-          console.log(
+          blockchainLog(
             '========================================',
           )
 
@@ -231,7 +241,7 @@ export async function withdrawExecutorETH(
             error,
           )
 
-          console.log(
+          blockchainLog(
             '========================================',
           )
 
@@ -245,11 +255,11 @@ export async function withdrawExecutorETH(
 
       export async function withdrawExecutorWETHAsETH(): Promise<string> {
 
-        console.log(
+        blockchainLog(
           '========================================',
         )
 
-        console.log(
+        blockchainLog(
           '[CONTRACT DEBUG] WETH -> ETH conversion START',
         )
 
@@ -264,7 +274,7 @@ export async function withdrawExecutorETH(
           const signerAddress =
             await signer.getAddress()
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] Conversion signer:',
             signerAddress,
           )
@@ -276,14 +286,14 @@ export async function withdrawExecutorETH(
               signer,
             )
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] Calling withdrawWETHAsETH()...',
           )
 
           const transaction =
             await executor.withdrawWETHAsETH()
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] WETH -> ETH transaction:',
             transaction.hash,
           )
@@ -295,16 +305,16 @@ export async function withdrawExecutorETH(
           const receipt =
             await transaction.wait()
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] WETH -> ETH confirmed:',
             receipt?.hash ?? transaction.hash,
           )
 
-          console.log(
+          blockchainLog(
             '[CONTRACT DEBUG] WETH -> ETH conversion END',
           )
 
-          console.log(
+          blockchainLog(
             '========================================',
           )
 
@@ -317,7 +327,7 @@ export async function withdrawExecutorETH(
             error,
           )
 
-          console.log(
+          blockchainLog(
             '========================================',
           )
 
@@ -438,20 +448,20 @@ export function encodeFlashLoanArbitrageParams(
   minOut2: bigint,
   minProfit: bigint,
 ): string {
-  console.log('========================================')
-  console.log('[FLASH LOAN PARAM ENCODER] START')
-  console.log('========================================')
+  blockchainLog('========================================')
+  blockchainLog('[FLASH LOAN PARAM ENCODER] START')
+  blockchainLog('========================================')
 
   //====================================================
   // Input diagnostics
   //====================================================
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] operationType:',
     operationType,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] operationType meaning:',
     operationType === 1
       ? 'DEX ARBITRAGE'
@@ -460,12 +470,12 @@ export function encodeFlashLoanArbitrageParams(
         : 'INVALID',
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] firstDex:',
     firstDex,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] firstDex meaning:',
     firstDex === 0
       ? 'Uniswap V3 -> V2-compatible DEX'
@@ -474,32 +484,32 @@ export function encodeFlashLoanArbitrageParams(
         : 'INVALID',
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] tokenIn:',
     tokenIn,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] tokenOut:',
     tokenOut,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] uniFee:',
     uniFee,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] minOut1:',
     minOut1.toString(),
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] minOut2:',
     minOut2.toString(),
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] minProfit:',
     minProfit.toString(),
   )
@@ -569,8 +579,8 @@ export function encodeFlashLoanArbitrageParams(
   const abiCoder =
     AbiCoder.defaultAbiCoder()
 
-  console.log('----------------------------------------')
-  console.log(
+  blockchainLog('----------------------------------------')
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] Encoding operationData...',
   )
 
@@ -596,12 +606,12 @@ export function encodeFlashLoanArbitrageParams(
       ],
     )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] operationData:',
     operationData,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] operationData bytes:',
     (operationData.length - 2) / 2,
   )
@@ -617,8 +627,8 @@ export function encodeFlashLoanArbitrageParams(
   // )
   //====================================================
 
-  console.log('----------------------------------------')
-  console.log(
+  blockchainLog('----------------------------------------')
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] Encoding outer params...',
   )
 
@@ -634,12 +644,12 @@ export function encodeFlashLoanArbitrageParams(
       ],
     )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] params:',
     params,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] params bytes:',
     (params.length - 2) / 2,
   )
@@ -648,56 +658,56 @@ export function encodeFlashLoanArbitrageParams(
   // Final diagnostics
   //====================================================
 
-  console.log('----------------------------------------')
-  console.log(
+  blockchainLog('----------------------------------------')
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] FINAL SUMMARY',
   )
 
-  console.log(
+  blockchainLog(
     'operationType =',
     operationType,
   )
 
-  console.log(
+  blockchainLog(
     'firstDex =',
     firstDex,
   )
 
-  console.log(
+  blockchainLog(
     'tokenIn =',
     tokenIn,
   )
 
-  console.log(
+  blockchainLog(
     'tokenOut =',
     tokenOut,
   )
 
-  console.log(
+  blockchainLog(
     'uniFee =',
     uniFee,
   )
 
-  console.log(
+  blockchainLog(
     'minOut1 =',
     minOut1.toString(),
   )
 
-  console.log(
+  blockchainLog(
     'minOut2 =',
     minOut2.toString(),
   )
 
-  console.log(
+  blockchainLog(
     'minProfit =',
     minProfit.toString(),
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN PARAM ENCODER] SUCCESS',
   )
 
-  console.log('========================================')
+  blockchainLog('========================================')
 
   return params
 }
@@ -713,12 +723,12 @@ export function encodeFlashLoanArbitrageParams(
             params: string,
           ): Promise<boolean> {
 
-            console.log('========================================')
-            console.log('[FLASH LOAN SIMULATION] START')
-            console.log('Asset:', asset)
-            console.log('Amount:', amount.toString())
-            console.log('Params:', params)
-            console.log(
+            blockchainLog('========================================')
+            blockchainLog('[FLASH LOAN SIMULATION] START')
+            blockchainLog('Asset:', asset)
+            blockchainLog('Amount:', amount.toString())
+            blockchainLog('Params:', params)
+            blockchainLog(
               'Executor:',
               EXECUTOR_CONTRACT_ADDRESS,
             )
@@ -734,7 +744,7 @@ export function encodeFlashLoanArbitrageParams(
               const signerAddress =
                 await signer.getAddress()
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN SIMULATION] Signer:',
                 signerAddress,
               )
@@ -746,7 +756,7 @@ export function encodeFlashLoanArbitrageParams(
                   signer,
                 )
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN SIMULATION] Calling staticCall...'
               )
 
@@ -756,11 +766,11 @@ export function encodeFlashLoanArbitrageParams(
                 params,
               )
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN SIMULATION] SUCCESS'
               )
 
-              console.log('========================================')
+              blockchainLog('========================================')
 
               return true
 
@@ -841,25 +851,25 @@ export function encodeFlashLoanArbitrageParams(
             params: string,
           ): Promise<bigint> {
 
-            console.log('========================================')
-            console.log('[FLASH LOAN GAS ESTIMATE] START')
+            blockchainLog('========================================')
+            blockchainLog('[FLASH LOAN GAS ESTIMATE] START')
 
-            console.log(
+            blockchainLog(
               '[FLASH LOAN GAS ESTIMATE] Asset:',
               asset,
             )
 
-            console.log(
+            blockchainLog(
               '[FLASH LOAN GAS ESTIMATE] Amount:',
               amount.toString(),
             )
 
-            console.log(
+            blockchainLog(
               '[FLASH LOAN GAS ESTIMATE] Params:',
               params,
             )
 
-            console.log(
+            blockchainLog(
               '[FLASH LOAN GAS ESTIMATE] Executor:',
               EXECUTOR_CONTRACT_ADDRESS,
             )
@@ -875,7 +885,7 @@ export function encodeFlashLoanArbitrageParams(
               const signerAddress =
                 await signer.getAddress()
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN GAS ESTIMATE] Signer:',
                 signerAddress,
               )
@@ -893,7 +903,7 @@ export function encodeFlashLoanArbitrageParams(
               // This does NOT submit a transaction.
               // ======================================================
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN GAS ESTIMATE] Calling estimateGas...'
               )
 
@@ -904,16 +914,16 @@ export function encodeFlashLoanArbitrageParams(
                   params,
                 )
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN GAS ESTIMATE] Gas estimate:',
                 gasEstimate.toString(),
               )
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN GAS ESTIMATE] SUCCESS'
               )
 
-              console.log('========================================')
+              blockchainLog('========================================')
 
               return gasEstimate
 
@@ -994,25 +1004,25 @@ export function encodeFlashLoanArbitrageParams(
         params: string,
       ): Promise<string> {
 
-        console.log('========================================')
-        console.log('[FLASH LOAN EXECUTION] START')
+        blockchainLog('========================================')
+        blockchainLog('[FLASH LOAN EXECUTION] START')
 
-        console.log(
+        blockchainLog(
           '[FLASH LOAN EXECUTION] Asset:',
           asset,
         )
 
-        console.log(
+        blockchainLog(
           '[FLASH LOAN EXECUTION] Amount:',
           amount.toString(),
         )
 
-        console.log(
+        blockchainLog(
           '[FLASH LOAN EXECUTION] Params:',
           params,
         )
 
-        console.log(
+        blockchainLog(
           '[FLASH LOAN EXECUTION] Executor:',
           EXECUTOR_CONTRACT_ADDRESS,
         )
@@ -1028,7 +1038,7 @@ export function encodeFlashLoanArbitrageParams(
           const signerAddress =
             await signer.getAddress()
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Signer:',
             signerAddress,
           )
@@ -1044,7 +1054,7 @@ export function encodeFlashLoanArbitrageParams(
           // Pre-flight simulation
           // ======================================================
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Running pre-flight staticCall...'
           )
 
@@ -1054,7 +1064,7 @@ export function encodeFlashLoanArbitrageParams(
             params,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Pre-flight simulation SUCCESS'
           )
 
@@ -1062,7 +1072,7 @@ export function encodeFlashLoanArbitrageParams(
           // Send real transaction
           // ======================================================
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Sending transaction...'
           )
 
@@ -1073,16 +1083,16 @@ export function encodeFlashLoanArbitrageParams(
               params,
             )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Transaction submitted'
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN EXECUTION] Transaction hash:',
             transaction.hash,
           )
 
-          console.log('========================================')
+          blockchainLog('========================================')
 
           return transaction.hash
 
@@ -1189,12 +1199,12 @@ export function encodeFlashLoanArbitrageParams(
         executorWETHBalance: string
       }> {
 
-        console.log('========================================')
-        console.log(
+        blockchainLog('========================================')
+        blockchainLog(
           '[FLASH LOAN RESULT] START',
         )
 
-        console.log(
+        blockchainLog(
           '[FLASH LOAN RESULT] Transaction:',
           txHash,
         )
@@ -1220,11 +1230,11 @@ export function encodeFlashLoanArbitrageParams(
             )
           }
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Receipt found',
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Status:',
             receipt.status,
           )
@@ -1245,17 +1255,17 @@ export function encodeFlashLoanArbitrageParams(
           const gasCostWei =
             gasUsed * effectiveGasPrice
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Gas used:',
             gasUsed.toString(),
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Effective gas price:',
             effectiveGasPrice.toString(),
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Gas cost wei:',
             gasCostWei.toString(),
           )
@@ -1323,7 +1333,7 @@ export function encodeFlashLoanArbitrageParams(
                 executorAddress,
             )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Executor logs:',
             executorLogs.length,
           )
@@ -1344,7 +1354,7 @@ export function encodeFlashLoanArbitrageParams(
                 continue
               }
 
-              console.log(
+              blockchainLog(
                 '[FLASH LOAN RESULT] Event:',
                 parsed.name,
               )
@@ -1370,12 +1380,12 @@ export function encodeFlashLoanArbitrageParams(
                   flashLoanPremium =
                     premium
 
-                  console.log(
+                  blockchainLog(
                     '[FLASH LOAN RESULT] Flash loan amount:',
                     amount.toString(),
                   )
 
-                  console.log(
+                  blockchainLog(
                     '[FLASH LOAN RESULT] Flash loan premium:',
                     premium.toString(),
                   )
@@ -1488,56 +1498,56 @@ export function encodeFlashLoanArbitrageParams(
           // Final diagnostics
           // ====================================================
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Status:',
             status,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Flash loan amount:',
             flashLoanAmount?.toString() ?? 'N/A',
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Flash loan premium:',
             flashLoanPremium?.toString() ?? 'N/A',
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Swap count:',
             swapCount,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Arbitrage profit:',
             arbitrageProfit?.toString() ?? 'N/A',
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Operation ID:',
             operationId?.toString() ?? 'N/A',
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Operation success:',
             operationSuccess,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Executor USDC:',
             executorUSDCBalance,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] Executor WETH:',
             executorWETHBalance,
           )
 
-          console.log(
+          blockchainLog(
             '[FLASH LOAN RESULT] SUCCESS',
           )
 
-          console.log('========================================')
+          blockchainLog('========================================')
 
           return {
             status,
@@ -1653,55 +1663,55 @@ export async function getUniswapV3Quote(
       provider,
     )
 
-  console.log(
+  blockchainLog(
     '========================================',
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] START',
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] Token In:',
     tokenIn,
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] Token Out:',
     tokenOut,
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] Amount In:',
     amountIn.toString(),
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] Fee:',
     fee,
   )
 
-  console.log(
+  blockchainLog(
     '[UNISWAP V3 QUOTE] Quoter:',
     UNISWAP_V3_QUOTER_V2_ADDRESS,
   )
 
-  console.log(
+  blockchainLog(
   '[UNISWAP V3 QUOTE] FINAL TOKEN IN:',
   tokenIn,
 )
 
-console.log(
+blockchainLog(
   '[UNISWAP V3 QUOTE] FINAL TOKEN OUT:',
   tokenOut,
 )
 
-console.log(
+blockchainLog(
   '[UNISWAP V3 QUOTE] FINAL AMOUNT IN:',
   amountIn.toString(),
 )
 
-console.log(
+blockchainLog(
   '[UNISWAP V3 QUOTE] FINAL FEE:',
   fee,
 )
@@ -1723,16 +1733,16 @@ console.log(
     const amountOut =
       result[0]
 
-    console.log(
+    blockchainLog(
       '[UNISWAP V3 QUOTE] Amount Out:',
       amountOut.toString(),
     )
 
-    console.log(
+    blockchainLog(
       '[UNISWAP V3 QUOTE] SUCCESS',
     )
 
-    console.log(
+    blockchainLog(
       '========================================',
     )
 
@@ -1811,25 +1821,25 @@ export async function diagnoseUniswapV3Pools(): Promise<void> {
       provider,
     )
 
-  console.log(
+  blockchainLog(
     '========================================',
   )
 
-  console.log(
+  blockchainLog(
     '[V3 POOL DIAGNOSTIC] START',
   )
 
-  console.log(
+  blockchainLog(
     '[V3 POOL DIAGNOSTIC] Factory:',
     UNISWAP_V3_FACTORY_ADDRESS,
   )
 
-  console.log(
+  blockchainLog(
     '[V3 POOL DIAGNOSTIC] USDC:',
     USDC_ADDRESS,
   )
 
-  console.log(
+  blockchainLog(
     '[V3 POOL DIAGNOSTIC] WETH:',
     WETH_ADDRESS,
   )
@@ -1844,11 +1854,11 @@ export async function diagnoseUniswapV3Pools(): Promise<void> {
 
     for (const fee of fees) {
 
-      console.log(
+      blockchainLog(
         '----------------------------------------',
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] Fee:',
         fee,
       )
@@ -1860,7 +1870,7 @@ export async function diagnoseUniswapV3Pools(): Promise<void> {
           fee,
         )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] Pool:',
         poolAddress,
       )
@@ -1900,38 +1910,38 @@ export async function diagnoseUniswapV3Pools(): Promise<void> {
           pool.slot0(),
         ])
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] token0:',
         token0,
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] token1:',
         token1,
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] Pool fee:',
         poolFee.toString(),
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] Liquidity:',
         liquidity.toString(),
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] sqrtPriceX96:',
         slot0[0].toString(),
       )
 
-      console.log(
+      blockchainLog(
         '[V3 POOL DIAGNOSTIC] Tick:',
         slot0[1].toString(),
       )
     }
 
-    console.log(
+    blockchainLog(
       '[V3 POOL DIAGNOSTIC] SUCCESS',
     )
 
@@ -1967,7 +1977,7 @@ export async function diagnoseUniswapV3Pools(): Promise<void> {
     )
   }
 
-  console.log(
+  blockchainLog(
     '========================================',
   )
 }
@@ -2022,25 +2032,25 @@ export async function getV2Quote(
       provider,
     )
 
-  console.log(
+  blockchainLog(
     '========================================',
   )
 
-  console.log(
+  blockchainLog(
     '[V2 QUOTE] START',
   )
 
-  console.log(
+  blockchainLog(
     '[V2 QUOTE] Router:',
     V2_ROUTER_ADDRESS,
   )
 
-  console.log(
+  blockchainLog(
     '[V2 QUOTE] Amount In:',
     amountIn.toString(),
   )
 
-  console.log(
+  blockchainLog(
     '[V2 QUOTE] Path:',
     path,
   )
@@ -2056,16 +2066,16 @@ export async function getV2Quote(
     const amountOut =
       amounts[amounts.length - 1]
 
-    console.log(
+    blockchainLog(
       '[V2 QUOTE] Amount Out:',
       amountOut.toString(),
     )
 
-    console.log(
+    blockchainLog(
       '[V2 QUOTE] SUCCESS',
     )
 
-    console.log(
+    blockchainLog(
       '========================================',
     )
 
@@ -2156,30 +2166,30 @@ export async function getV2Quote(
             provider,
           )
 
-        console.log(
+        blockchainLog(
           '========================================',
         )
 
-        console.log(
+        blockchainLog(
           '[V2 PAIR DIAGNOSTIC] START',
         )
 
-        console.log(
+        blockchainLog(
           '[V2 PAIR DIAGNOSTIC] Router:',
           V2_ROUTER_ADDRESS,
         )
 
-        console.log(
+        blockchainLog(
           '[V2 PAIR DIAGNOSTIC] Factory:',
           factoryAddress,
         )
 
-        console.log(
+        blockchainLog(
           '[V2 PAIR DIAGNOSTIC] WETH:',
           WETH_ADDRESS,
         )
 
-        console.log(
+        blockchainLog(
           '[V2 PAIR DIAGNOSTIC] USDC:',
           USDC_ADDRESS,
         )
@@ -2192,7 +2202,7 @@ export async function getV2Quote(
               USDC_ADDRESS,
             )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] Pair:',
             pairAddress,
           )
@@ -2207,7 +2217,7 @@ export async function getV2Quote(
               '[V2 PAIR DIAGNOSTIC] NO PAIR EXISTS',
             )
 
-            console.log(
+            blockchainLog(
               '========================================',
             )
 
@@ -2232,32 +2242,32 @@ export async function getV2Quote(
               pair.getReserves(),
             ])
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] token0:',
             token0,
           )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] token1:',
             token1,
           )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] reserve0:',
             reserves[0].toString(),
           )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] reserve1:',
             reserves[1].toString(),
           )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] timestamp:',
             reserves[2].toString(),
           )
 
-          console.log(
+          blockchainLog(
             '[V2 PAIR DIAGNOSTIC] SUCCESS',
           )
 
@@ -2294,7 +2304,7 @@ export async function getV2Quote(
 
         }
 
-        console.log(
+        blockchainLog(
           '========================================',
         )
       }
@@ -2545,31 +2555,31 @@ export async function getWalletWETHBalance(): Promise<string> {
 
 export async function diagnoseWalletTokenBalances(): Promise<void> {
 
-  console.log('========================================')
-  console.log('[WALLET BALANCE DIAGNOSTIC] START')
-  console.log('========================================')
+  blockchainLog('========================================')
+  blockchainLog('[WALLET BALANCE DIAGNOSTIC] START')
+  blockchainLog('========================================')
 
   try {
 
     const wallet =
       await getConnectedWalletAddress()
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] Wallet:',
       wallet,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] Aave/Project USDC:',
       USDC_ADDRESS,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] Circle USDC:',
       CIRCLE_USDC_ADDRESS,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] WETH:',
       WETH_ADDRESS,
     )
@@ -2585,22 +2595,22 @@ export async function diagnoseWalletTokenBalances(): Promise<void> {
         getWalletWETHBalance(),
       ])
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] Aave/Project USDC:',
       usdc,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] Circle USDC:',
       circleUsdc,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] WETH:',
       weth,
     )
 
-    console.log(
+    blockchainLog(
       '[WALLET BALANCE DIAGNOSTIC] SUCCESS',
     )
 
@@ -2612,7 +2622,7 @@ export async function diagnoseWalletTokenBalances(): Promise<void> {
     )
   }
 
-  console.log('========================================')
+  blockchainLog('========================================')
 }
 
 
@@ -2650,15 +2660,15 @@ export async function diagnoseV2Router(): Promise<void> {
       provider,
     )
 
-  console.log(
+  blockchainLog(
     '========================================',
   )
 
-  console.log(
+  blockchainLog(
     '[V2 ROUTER DIAGNOSTIC] START',
   )
 
-  console.log(
+  blockchainLog(
     '[V2 ROUTER DIAGNOSTIC] Router:',
     V2_ROUTER_ADDRESS,
   )
@@ -2671,17 +2681,17 @@ export async function diagnoseV2Router(): Promise<void> {
     const weth =
       await router.WETH()
 
-    console.log(
+    blockchainLog(
       '[V2 ROUTER DIAGNOSTIC] Factory:',
       factory,
     )
 
-    console.log(
+    blockchainLog(
       '[V2 ROUTER DIAGNOSTIC] WETH:',
       weth,
     )
 
-    console.log(
+    blockchainLog(
       '[V2 ROUTER DIAGNOSTIC] SUCCESS',
     )
 
@@ -2718,7 +2728,7 @@ export async function diagnoseV2Router(): Promise<void> {
 
   }
 
-    console.log(
+    blockchainLog(
     '========================================',
   )
 }
@@ -2789,11 +2799,11 @@ if (import.meta.env.DEV) {
     data: string,
   ): void => {
 
-    console.log(
+    blockchainLog(
       '========================================',
     )
 
-    console.log(
+    blockchainLog(
       '[EXECUTOR ERROR DECODER] START',
     )
 
@@ -2805,12 +2815,12 @@ if (import.meta.env.DEV) {
       const selector =
         cleanData.slice(0, 10)
 
-      console.log(
+      blockchainLog(
         '[EXECUTOR ERROR DECODER] selector:',
         selector,
       )
 
-      console.log(
+      blockchainLog(
         '[EXECUTOR ERROR DECODER] raw data:',
         cleanData,
       )
@@ -2829,17 +2839,17 @@ if (import.meta.env.DEV) {
             ),
           )
 
-        console.log(
+        blockchainLog(
           '[EXECUTOR ERROR DECODER] MATCH:',
           'ArbitrageLegFailed(uint8)',
         )
 
-        console.log(
+        blockchainLog(
           '[EXECUTOR ERROR DECODER] leg:',
           leg,
         )
 
-        console.log(
+        blockchainLog(
           '[EXECUTOR ERROR DECODER] meaning:',
           leg === 1
             ? 'DEX LEG 1 FAILED'
@@ -2865,11 +2875,11 @@ if (import.meta.env.DEV) {
 
     } finally {
 
-      console.log(
+      blockchainLog(
         '[EXECUTOR ERROR DECODER] END',
       )
 
-      console.log(
+      blockchainLog(
         '========================================',
       )
     }
@@ -2877,27 +2887,27 @@ if (import.meta.env.DEV) {
 }
 
 export function diagnoseFlashLoanErrorSelector(): void {
-  console.log('========================================')
-  console.log('[FLASH LOAN ERROR SELECTOR] START')
+  blockchainLog('========================================')
+  blockchainLog('[FLASH LOAN ERROR SELECTOR] START')
 
   const selector =
     id('FlashLoanCallFailed()').slice(0, 10)
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN ERROR SELECTOR] FlashLoanCallFailed():',
     selector,
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN ERROR SELECTOR] Remix revert selector:',
     '0x224311fe',
   )
 
-  console.log(
+  blockchainLog(
     '[FLASH LOAN ERROR SELECTOR] MATCH:',
     selector.toLowerCase() ===
       '0x224311fe'.toLowerCase(),
   )
 
-  console.log('========================================')
+  blockchainLog('========================================')
 }

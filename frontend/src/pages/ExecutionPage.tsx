@@ -486,6 +486,30 @@ function ExecutionPage() {
     > | null
   >(null)
 
+  // ====================================================
+// Confirmed Transaction Profit
+// ====================================================
+//
+// Stores the REAL profit calculated from the
+// confirmed blockchain transaction.
+//
+// Scanner estimated profit is intentionally NOT used
+// here.
+//
+
+  const [
+    confirmedProfit,
+    setConfirmedProfit,
+  ] = useState<{
+    grossProfitUsdc: number
+    aavePremiumUsdc: number
+    netBeforeGasUsdc: number
+    gasCostEth: number
+    gasCostUsd: number
+    netProfitUsdc: number | null
+    ethUsdPrice: number
+  } | null>(null)
+
 
   const [
     walletAddress,
@@ -1476,6 +1500,20 @@ function ExecutionPage() {
                   ? netBeforeGasUsdc - gasCostUsd
                   : null
 
+                  // ------------------------------------------------
+                  // Store REAL confirmed transaction profit
+                  // ------------------------------------------------
+
+                  setConfirmedProfit({
+                    grossProfitUsdc,
+                    aavePremiumUsdc,
+                    netBeforeGasUsdc,
+                    gasCostEth,
+                    gasCostUsd,
+                    netProfitUsdc,
+                    ethUsdPrice,
+                  })
+
 
               console.log(
                 '[TRANSACTION PROFIT DEBUG] Gross Profit:',
@@ -2427,98 +2465,177 @@ function ExecutionPage() {
       </div>
 
 
-      {/* ==================================================
+            {/* ==================================================
           Profit Result
           ================================================== */}
 
-      <div className="mt-6">
+          <div className="mt-6">
 
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Arbitrage Result
-        </p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Arbitrage Result
+            </p>
 
-        <div className="mt-3 space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
 
-          <div className="flex items-center justify-between gap-4">
+            <div className="mt-3 space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
 
-            <span className="text-sm text-slate-400">
-              Gross Arbitrage Profit
-            </span>
+              {/* ------------------------------------------------
+                  Gross Arbitrage Profit
+                  ------------------------------------------------ */}
 
-            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
 
-              <span className="text-sm text-slate-400">
-                Aave Premium
-              </span>
+                <span className="text-sm text-slate-400">
+                  Gross Arbitrage Profit
+                </span>
 
-              <span className="text-sm font-semibold text-amber-400">
-                {formatUnits(
-                  flashLoanResult.flashLoanPremium ?? 0n,
-                  6,
-                )}{' '}
-                USDC
-              </span>
+                <span className="text-sm font-bold text-emerald-400">
+                  {formatUnits(
+                    flashLoanResult.arbitrageProfit ?? 0n,
+                    6,
+                  )}{' '}
+                  USDC
+                </span>
+
+              </div>
+
+
+              {/* ------------------------------------------------
+                  Aave Premium
+                  ------------------------------------------------ */}
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span className="text-sm text-slate-400">
+                  Aave Premium
+                </span>
+
+                <span className="text-sm font-semibold text-amber-400">
+                  {formatUnits(
+                    flashLoanResult.flashLoanPremium ?? 0n,
+                    6,
+                  )}{' '}
+                  USDC
+                </span>
+
+              </div>
+
+
+              {/* ------------------------------------------------
+                  Net Before Gas
+                  ------------------------------------------------ */}
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span className="text-sm text-slate-400">
+                  Net Before Gas
+                </span>
+
+                <span className="text-sm font-semibold text-white">
+                  {confirmedProfit
+                    ? confirmedProfit.netBeforeGasUsdc.toFixed(6)
+                    : '—'}{' '}
+                  USDC
+                </span>
+
+              </div>
+
+
+              {/* ------------------------------------------------
+                  Actual Gas Cost
+                  ------------------------------------------------ */}
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span className="text-sm text-slate-400">
+                  Actual Gas Cost
+                </span>
+
+                <span className="text-sm font-semibold text-amber-400">
+                  {confirmedProfit
+                    ? `$${confirmedProfit.gasCostUsd.toFixed(6)}`
+                    : '—'}
+                </span>
+
+              </div>
+
+
+              {/* ------------------------------------------------
+                  TRUE NET PROFIT
+                  ------------------------------------------------ */}
+
+              <div className="mt-3 flex items-center justify-between gap-4 border-t border-emerald-500/20 pt-4">
+
+                <span className="text-sm font-semibold text-white">
+                  TRUE NET PROFIT
+                </span>
+
+                <span className="text-xl font-bold text-emerald-400">
+                  {confirmedProfit &&
+                  confirmedProfit.netProfitUsdc !== null
+                    ? `$${confirmedProfit.netProfitUsdc.toFixed(6)}`
+                    : '—'}
+                </span>
+
+              </div>
+
+
+              {/* ------------------------------------------------
+                  ETH/USD Used
+                  ------------------------------------------------ */}
+
+              {confirmedProfit && (
+                <div className="flex items-center justify-between gap-4">
+
+                  <span className="text-xs text-slate-500">
+                    ETH/USD Used
+                  </span>
+
+                  <span className="text-xs font-semibold text-slate-400">
+                    ${confirmedProfit.ethUsdPrice.toFixed(2)}
+                  </span>
+
+                </div>
+              )}
+
+
+              {/* ------------------------------------------------
+                  Executor Balances
+                  ------------------------------------------------ */}
+
+              <div className="mt-3 border-t border-slate-800 pt-3">
+
+                <div className="flex items-center justify-between gap-4">
+
+                  <span className="text-sm text-slate-400">
+                    Executor USDC
+                  </span>
+
+                  <span className="text-sm font-semibold text-emerald-400">
+                    {flashLoanResult.executorUSDCBalance ?? '0'}{' '}
+                    USDC
+                  </span>
+
+                </div>
+
+
+                <div className="mt-3 flex items-center justify-between gap-4">
+
+                  <span className="text-sm text-slate-400">
+                    Executor WETH
+                  </span>
+
+                  <span className="text-sm font-semibold text-emerald-400">
+                    {flashLoanResult.executorWETHBalance ?? '0'}{' '}
+                    WETH
+                  </span>
+
+                </div>
+
+              </div>
 
             </div>
 
-            <div className="flex items-center justify-between gap-4">
-
-              <span className="text-sm text-slate-400">
-                Net Before Gas
-              </span>
-
-              <span className="text-sm font-semibold text-white">
-                {formatUnits(
-                  (flashLoanResult.arbitrageProfit ?? 0n) -
-                    (flashLoanResult.flashLoanPremium ?? 0n),
-                  6,
-                )}{' '}
-                USDC
-              </span>
-
-            </div>
-
-            <span className="text-sm font-bold text-emerald-400">
-              {formatUnits(
-                flashLoanResult.arbitrageProfit ?? 0n,
-                6,
-              )}{' '}
-              USDC
-            </span>
-
           </div>
-
-
-          <div className="flex items-center justify-between gap-4">
-
-            <span className="text-sm text-slate-400">
-              Executor USDC
-            </span>
-
-            <span className="text-sm font-semibold text-emerald-400">
-              {flashLoanResult.executorUSDCBalance ?? '0'}{' '}
-              USDC
-            </span>
-
-          </div>
-
-
-          <div className="flex items-center justify-between gap-4">
-
-            <span className="text-sm text-slate-400">
-              Executor WETH
-            </span>
-
-            <span className="text-sm font-semibold text-emerald-400">
-              {flashLoanResult.executorWETHBalance ?? '0'}{' '}
-              WETH
-            </span>
-
-          </div>
-
-        </div>
-
-      </div>
 
 
     {/* ==================================================

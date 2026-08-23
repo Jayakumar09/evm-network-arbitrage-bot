@@ -162,19 +162,42 @@ function ContractPage() {
   useEffect(() => {
 
     let mounted = true
-
+    let refreshInProgress = false
 
 
     async function loadContractData(
+      source: string = 'UNKNOWN',
       showLoading: boolean = false,
     ) {
 
+      if (refreshInProgress) {
+
+        console.log(
+          '[CONTRACT DEBUG] Refresh skipped - previous refresh still running.',
+        )
+
+        return
+      }
 
 
+      refreshInProgress = true
 
 
+      console.log(
+        '====================================================',
+      )
 
+      console.log(
+        `[CONTRACT DEBUG] Refresh START - source: ${source}`,
+      )
 
+      console.log(
+        `[CONTRACT DEBUG] Time: ${new Date().toLocaleTimeString()}`,
+      )
+
+      console.log(
+        '====================================================',
+      )
 
 
       try {
@@ -193,13 +216,18 @@ function ContractPage() {
         // Connected wallet
         // ------------------------------------------------
 
-
+        console.log(
+          '[CONTRACT DEBUG] Reading connected wallet...',
+        )
 
         const wallet =
           await getConnectedWalletAddress()
 
 
-
+        console.log(
+          '[CONTRACT DEBUG] Connected wallet:',
+          wallet,
+        )
 
 
         if (!mounted) {
@@ -218,13 +246,18 @@ function ContractPage() {
         // Contract owner
         // ------------------------------------------------
 
-
+        console.log(
+          '[CONTRACT DEBUG] Reading contract owner...',
+        )
 
         const owner =
           await getExecutorOwner()
 
 
-
+        console.log(
+          '[CONTRACT DEBUG] Contract owner:',
+          owner,
+        )
 
 
         if (!mounted) {
@@ -245,7 +278,10 @@ function ContractPage() {
             owner.toLowerCase()
 
 
-
+        console.log(
+          '[CONTRACT DEBUG] Owner authorization:',
+          ownerStatus,
+        )
 
 
         setIsOwner(
@@ -257,13 +293,18 @@ function ContractPage() {
         // Paused status
         // ------------------------------------------------
 
-
+        console.log(
+          '[CONTRACT DEBUG] Reading contract paused status...',
+        )
 
         const paused =
           await getExecutorPaused()
 
 
-
+        console.log(
+          '[CONTRACT DEBUG] Contract paused:',
+          paused,
+        )
 
 
         if (!mounted) {
@@ -282,7 +323,9 @@ function ContractPage() {
 
         if (!wallet) {
 
-
+          console.log(
+            '[CONTRACT DEBUG] No wallet connected. Resetting balances.',
+          )
 
           setEthBalance('0.000000')
           setUsdcBalance('0.00')
@@ -301,7 +344,9 @@ function ContractPage() {
         // Read all balances
         // ------------------------------------------------
 
-
+        console.log(
+          '[CONTRACT DEBUG] Reading blockchain balances...',
+        )
 
 
         const [
@@ -337,7 +382,40 @@ function ContractPage() {
         // Debug raw values
         // ------------------------------------------------
 
+        console.log(
+          '[CONTRACT DEBUG] Executor ETH:',
+          eth,
+        )
 
+        console.log(
+          '[CONTRACT DEBUG] Executor USDC:',
+          usdc,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Executor WETH:',
+          weth,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet ETH:',
+          walletEth,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet USDC:',
+          walletUsdc,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet Circle USDC:',
+          walletCircleUsdc,
+        )
+
+        console.log(
+          '[CONTRACT DEBUG] Wallet WETH:',
+          walletWeth,
+        )
 
 
         // ------------------------------------------------
@@ -378,7 +456,9 @@ function ContractPage() {
         )
 
 
-
+        console.log(
+          '[CONTRACT DEBUG] UI balances updated successfully.',
+        )
 
       } catch (error) {
 
@@ -403,12 +483,21 @@ function ContractPage() {
         setWalletWethBalance('0.000000')
 
       } finally {
+
+        refreshInProgress = false
+
+
         if (
           mounted &&
           showLoading
         ) {
           setLoading(false)
         }
+
+
+        console.log(
+          `[CONTRACT DEBUG] Refresh END - source: ${source}`,
+        )
       }
     }
 
@@ -417,9 +506,14 @@ function ContractPage() {
     // Initial load
     // ==================================================
 
+    console.log(
+      '[CONTRACT DEBUG] ContractPage mounted.',
+    )
 
-
-    loadContractData(true)
+    loadContractData(
+      'INITIAL_LOAD',
+      true,
+    )
 
 
     // ==================================================
@@ -432,7 +526,9 @@ function ContractPage() {
       window.setInterval(
         () => {
 
-          loadContractData()
+          loadContractData(
+            'AUTO_REFRESH',
+          )
 
         },
         5000,
@@ -476,7 +572,9 @@ function ContractPage() {
           '[CONTRACT DEBUG] MetaMask account changed.',
         )
 
-        loadContractData()
+        loadContractData(
+          'METAMASK_ACCOUNT_CHANGED',
+        )
       }
 
 
@@ -491,7 +589,9 @@ function ContractPage() {
           '[CONTRACT DEBUG] MetaMask network changed.',
         )
 
-        loadContractData()
+        loadContractData(
+          'METAMASK_CHAIN_CHANGED',
+        )
       }
 
 
@@ -506,7 +606,9 @@ function ContractPage() {
           '[CONTRACT DEBUG] Browser window focused - refreshing.',
         )
 
-        loadContractData()
+        loadContractData(
+          'WINDOW_FOCUS',
+        )
       }
 
 
@@ -522,9 +624,13 @@ function ContractPage() {
           'visible'
         ) {
 
+          console.log(
+            '[CONTRACT DEBUG] Page became visible - refreshing.',
+          )
 
-
-          loadContractData()
+          loadContractData(
+            'PAGE_VISIBLE',
+          )
         }
       }
 
@@ -560,7 +666,9 @@ function ContractPage() {
 
     return () => {
 
-
+      console.log(
+        '[CONTRACT DEBUG] ContractPage unmounted. Cleaning up.',
+      )
 
       mounted = false
 

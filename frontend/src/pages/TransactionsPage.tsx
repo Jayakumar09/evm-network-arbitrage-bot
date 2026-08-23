@@ -20,6 +20,12 @@ import type {
 } from '../services/transactionHistory'
 
 import {
+  getExecutorETHBalance,
+  getExecutorUSDCBalance,
+  getExecutorWETHBalance,
+} from '../services/blockchain'
+
+import {
   EXECUTOR_CONTRACT_ADDRESS,
 } from '../config/contracts'
 
@@ -1006,6 +1012,28 @@ function TransactionsPage() {
 
 
   // ====================================================
+  // Executor Balance
+  //
+  // Read directly from the live Sepolia Executor contract.
+  // ====================================================
+
+  const [
+    executorETHBalance,
+    setExecutorETHBalance,
+  ] = useState('0')
+
+  const [
+    executorUSDCBalance,
+    setExecutorUSDCBalance,
+  ] = useState('0')
+
+  const [
+    executorWETHBalance,
+    setExecutorWETHBalance,
+  ] = useState('0')
+
+
+  // ====================================================
   // Loading State
   // ====================================================
 
@@ -1079,6 +1107,60 @@ function TransactionsPage() {
     let mounted = true
 
     let refreshRunning = false
+
+
+    // ==================================================
+    // Update Executor Balance
+    // ==================================================
+
+    const refreshExecutorBalance =
+      async () => {
+
+        try {
+
+          const [
+            ethBalance,
+            usdcBalance,
+            wethBalance,
+          ] = await Promise.all([
+            getExecutorETHBalance(),
+            getExecutorUSDCBalance(),
+            getExecutorWETHBalance(),
+          ])
+
+
+          if (!mounted) {
+            return
+          }
+
+
+          setExecutorETHBalance(
+            ethBalance,
+          )
+
+          setExecutorUSDCBalance(
+            usdcBalance,
+          )
+
+          setExecutorWETHBalance(
+            wethBalance,
+          )
+
+        } catch (
+          balanceError
+        ) {
+
+          if (!mounted) {
+            return
+          }
+
+
+          console.warn(
+            '[TRANSACTION PAGE] Executor balance refresh failed:',
+            balanceError,
+          )
+        }
+      }
 
 
     // ==================================================
@@ -1244,6 +1326,13 @@ function TransactionsPage() {
         // ----------------------------------------------
 
         await refreshExecutorWithdrawals()
+
+
+        // ----------------------------------------------
+        // Refresh live Executor balances.
+        // ----------------------------------------------
+
+        await refreshExecutorBalance()
 
 
         if (!mounted) {
@@ -1792,20 +1881,164 @@ function TransactionsPage() {
 
   // ====================================================
   // Summary
+  //
+  // IMPORTANT:
+  // Arbitrage statistics and Executor withdrawals are
+  // counted separately.
+  //
+  // Total Transactions:
+  //     ARBITRAGE executions only.
+  //
+  // Successful:
+  //     Successful ARBITRAGE executions only.
+  //
+  // Withdrawals:
+  //     Executor -> Owner withdrawal transactions.
+  //
+  // Total Net Profit:
+  //     ARBITRAGE profit only.
   // ====================================================
 
   const totalTransactions =
-    mergedTransactions.length
-
-
-  const successfulTransactions =
-    mergedTransactions.filter(
+    arbitrageTransactions.filter(
       (
         transaction: TransactionItem,
       ) =>
-        transaction.status ===
-        'SUCCESS',
+        transaction.type ===
+        'ARBITRAGE',
     ).length
+
+
+  const successfulTransactions =
+    arbitrageTransactions.filter(
+      (
+        transaction: TransactionItem,
+      ) =>
+        transaction.type ===
+          'ARBITRAGE' &&
+        transaction.status ===
+          'SUCCESS',
+    ).length
+
+
+  const totalWithdrawals =
+    executorWithdrawals.length
+
+
+  // ====================================================
+  // Total Withdrawal Amounts
+  //
+  // Count and amounts are kept separate from arbitrage
+  // profit. Withdrawal amounts come from the actual
+  // Executor -> Owner transaction records.
+  // ====================================================
+
+  const totalWithdrawnUSDC =
+    executorWithdrawals
+      .filter(
+        (
+          transaction: TransactionItem,
+        ) =>
+          transaction.type ===
+            'TOKEN_WITHDRAWAL' &&
+          transaction.amount
+            .toUpperCase()
+            .includes('USDC'),
+      )
+      .reduce(
+        (
+          total,
+          transaction: TransactionItem,
+        ) => {
+
+          const match =
+            transaction.amount.match(
+              /([0-9]+(?:\.[0-9]+)?)\s*USDC/i,
+            )
+
+          return (
+            total +
+            (
+              match
+                ? Number(match[1])
+                : 0
+            )
+          )
+        },
+        0,
+      )
+
+
+  const totalWithdrawnWETH =
+    executorWithdrawals
+      .filter(
+        (
+          transaction: TransactionItem,
+        ) =>
+          transaction.type ===
+            'TOKEN_WITHDRAWAL' &&
+          transaction.amount
+            .toUpperCase()
+            .includes('WETH'),
+      )
+      .reduce(
+        (
+          total,
+          transaction: TransactionItem,
+        ) => {
+
+          const match =
+            transaction.amount.match(
+              /([0-9]+(?:\.[0-9]+)?)\s*WETH/i,
+            )
+
+          return (
+            total +
+            (
+              match
+                ? Number(match[1])
+                : 0
+            )
+          )
+        },
+        0,
+      )
+
+
+  const totalWithdrawnETH =
+    executorWithdrawals
+      .filter(
+        (
+          transaction: TransactionItem,
+        ) =>
+          transaction.type ===
+            'ETH_WITHDRAWAL' &&
+          transaction.amount
+            .toUpperCase()
+            .includes('ETH'),
+      )
+      .reduce(
+        (
+          total,
+          transaction: TransactionItem,
+        ) => {
+
+          const match =
+            transaction.amount.match(
+              /([0-9]+(?:\.[0-9]+)?)\s*ETH/i,
+            )
+
+          return (
+            total +
+            (
+              match
+                ? Number(match[1])
+                : 0
+            )
+          )
+        },
+        0,
+      )
 
 
   // ====================================================
@@ -1909,7 +2142,7 @@ function TransactionsPage() {
           Summary
           ================================================== */}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
+      <div className="mb-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
 
         <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
@@ -1950,6 +2183,100 @@ function TransactionsPage() {
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
             ${totalNetProfit.toFixed(2)}
           </p>
+
+          <p className="mt-1 text-xs text-slate-500">
+            Historical arbitrage profit
+          </p>
+
+        </div>
+
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
+
+          <p className="text-xs uppercase tracking-wide text-slate-400">
+            Withdrawals
+          </p>
+
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {loading
+              ? '...'
+              : totalWithdrawals}
+          </p>
+
+          {!loading && totalWithdrawals > 0 && (
+              <div className="mt-2 space-y-0.5 text-xs text-slate-400">
+
+                {totalWithdrawnUSDC > 0 && (
+                  <p>
+                    {totalWithdrawnUSDC.toFixed(2)} USDC
+                  </p>
+                )}
+
+                {totalWithdrawnWETH > 0 && (
+                  <p>
+                    {totalWithdrawnWETH.toFixed(6)} WETH
+                  </p>
+                )}
+
+                {totalWithdrawnETH > 0 && (
+                  <p>
+                    {totalWithdrawnETH.toFixed(6)} ETH
+                  </p>
+                )}
+
+              </div>
+            )}
+
+          {!loading && totalWithdrawals === 0 && (
+
+            <p className="mt-2 text-xs text-slate-500">
+              No withdrawals
+            </p>
+          )}
+
+        </div>
+
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
+
+          <p className="text-xs uppercase tracking-wide text-slate-400">
+            Executor Balance
+          </p>
+
+          {loading ? (
+
+            <p className="mt-2 text-2xl font-semibold text-white">
+              ...
+            </p>
+
+          ) : (
+
+            <div className="mt-2 space-y-1 text-sm">
+
+              <p className="font-semibold text-white">
+                {Number(
+                  executorUSDCBalance,
+                ).toFixed(2)} USDC
+              </p>
+
+              <p className="text-slate-300">
+                {Number(
+                  executorWETHBalance,
+                ).toFixed(8)} WETH
+              </p>
+
+              <p className="text-slate-400">
+                {Number(
+                  executorETHBalance,
+                ).toFixed(6)} ETH
+              </p>
+
+              <p className="pt-1 text-[10px] text-slate-500">
+                Live contract balance
+              </p>
+
+            </div>
+          )}
 
         </div>
 
