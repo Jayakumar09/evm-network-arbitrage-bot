@@ -640,9 +640,7 @@ async function getExecutorTransactions():
     !ownerWallet
   ) {
 
-    console.log(
-      '[TRANSACTION PAGE] No connected wallet. Executor withdrawal scan skipped.',
-    )
+    
 
     return []
   }
@@ -899,10 +897,7 @@ async function getExecutorTransactions():
   )
 
 
-  console.log(
-    '[TRANSACTION PAGE] Executor withdrawals detected:',
-    withdrawals,
-  )
+  
 
 
   return withdrawals
@@ -1199,10 +1194,7 @@ function TransactionsPage() {
         }
 
 
-        console.log(
-          '[TRANSACTION PAGE] Stored arbitrage transactions UPDATED:',
-          storedTransactions,
-        )
+        
 
 
         arbitrageTransactionsRef.current =
@@ -1253,10 +1245,7 @@ function TransactionsPage() {
           newSignature
         ) {
 
-          console.log(
-            '[TRANSACTION PAGE] Executor withdrawals UPDATED:',
-            mergedWithdrawals,
-          )
+          
 
 
           executorWithdrawalsRef.current =
@@ -1435,9 +1424,7 @@ function TransactionsPage() {
           }
 
 
-          console.log(
-            '[TRANSACTION PAGE] New transaction update received.',
-          )
+          
 
 
           void refreshStoredTransactions()
@@ -1469,9 +1456,7 @@ function TransactionsPage() {
         }
 
 
-        console.log(
-          '[TRANSACTION PAGE] Browser focus detected.',
-        )
+        
 
 
         refreshTransactions()
@@ -1496,9 +1481,7 @@ function TransactionsPage() {
           'visible'
         ) {
 
-          console.log(
-            '[TRANSACTION PAGE] Page became visible.',
-          )
+          
 
 
           refreshTransactions()
@@ -1546,22 +1529,13 @@ function TransactionsPage() {
         accounts: string[],
       ) => {
 
-        console.log(
-          '==================================================',
-        )
+        
 
-        console.log(
-          '[TRANSACTION PAGE] MetaMask accountsChanged',
-        )
+        
 
-        console.log(
-          '[TRANSACTION PAGE] New accounts:',
-          accounts,
-        )
+        
 
-        console.log(
-          '==================================================',
-        )
+        
 
 
         // ------------------------------------------------
@@ -1573,9 +1547,7 @@ function TransactionsPage() {
           0
         ) {
 
-          console.log(
-            '[TRANSACTION PAGE] No MetaMask account connected.',
-          )
+          
 
 
           if (mounted) {
@@ -1605,24 +1577,16 @@ function TransactionsPage() {
             }
 
 
-            console.log(
-              '[TRANSACTION PAGE] Reloading wallet-specific transaction history...',
-            )
+            
 
 
             const walletTransactions =
               await getStoredTransactions()
 
 
-            console.log(
-              '[TRANSACTION PAGE] Wallet-specific transactions:',
-              walletTransactions,
-            )
+            
 
-            console.log(
-              '[TRANSACTION PAGE] Wallet transaction count:',
-              walletTransactions.length,
-            )
+            
 
 
             // ------------------------------------------------
@@ -1654,67 +1618,31 @@ function TransactionsPage() {
     // MetaMask Network Changed
     // ==================================================
 
-    const handleChainChanged =
-      (
-        chainId: string,
-      ) => {
+    const handleChainChanged = () => {
 
-        console.log(
-          '==================================================',
-        )
+      window.setTimeout(
+        async () => {
 
-        console.log(
-          '[TRANSACTION PAGE] MetaMask chainChanged:',
-          chainId,
-        )
+          if (!mounted) {
+            return
+          }
 
-        console.log(
-          '[TRANSACTION PAGE] Reloading transaction history...',
-        )
+          const walletTransactions =
+            await getStoredTransactions()
 
-        console.log(
-          '==================================================',
-        )
+          arbitrageTransactionsRef.current =
+            walletTransactions
 
+          setArbitrageTransactions(
+            walletTransactions,
+          )
 
-        window.setTimeout(
-          async () => {
+          void refreshTransactions()
 
-            if (!mounted) {
-              return
-            }
-
-
-            console.log(
-              '[TRANSACTION PAGE] Reloading history after network change...',
-            )
-
-
-            const walletTransactions =
-              await getStoredTransactions()
-
-
-            console.log(
-              '[TRANSACTION PAGE] Transactions after network change:',
-              walletTransactions,
-            )
-
-
-            arbitrageTransactionsRef.current =
-              walletTransactions
-
-
-            setArbitrageTransactions(
-              walletTransactions,
-            )
-
-
-            void refreshTransactions()
-
-          },
-          100,
-        )
-      }
+        },
+        100,
+      )
+    }
 
 
     // ==================================================
@@ -1725,9 +1653,7 @@ function TransactionsPage() {
       ethereum
     ) {
 
-      console.log(
-        '[TRANSACTION PAGE] Registering MetaMask listeners...',
-      )
+      
 
 
       ethereum.on(
@@ -1742,9 +1668,7 @@ function TransactionsPage() {
       )
 
 
-      console.log(
-        '[TRANSACTION PAGE] MetaMask listeners registered.',
-      )
+      
     }
 
 
@@ -1794,9 +1718,7 @@ function TransactionsPage() {
         )
 
 
-        console.log(
-          '[TRANSACTION PAGE] MetaMask listeners removed.',
-        )
+        
       }
     }
 

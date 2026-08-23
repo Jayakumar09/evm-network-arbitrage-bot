@@ -209,10 +209,6 @@ function WalletButton() {
     }
 
 
-    console.log(
-      '[WalletButton] Dispatching wallet account event:',
-      detail,
-    )
 
 
     window.dispatchEvent(
@@ -246,9 +242,6 @@ function WalletButton() {
 
   function clearWalletState() {
 
-    console.log(
-      '[WalletButton] Clearing frontend wallet state...',
-    )
 
 
     if (
@@ -291,14 +284,8 @@ function WalletButton() {
   // ====================================================
 
   function applyWalletAccount(
-    account: string,
-    source:
-      | 'INITIAL_LOAD'
-      | 'ACCOUNT_CHANGED'
-      | 'MANUAL_SYNC'
-      | 'CHAIN_CHANGED'
-      | 'CONNECT',
-  ) {
+  account: string,
+) {
 
     const normalizedAccount =
       normalizeAddress(
@@ -306,27 +293,10 @@ function WalletButton() {
       )
 
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] APPLY ACCOUNT',
-    )
 
-    console.log(
-      '[WalletButton] Source:',
-      source,
-    )
 
-    console.log(
-      '[WalletButton] Account:',
-      normalizedAccount,
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     if (
@@ -356,14 +326,7 @@ function WalletButton() {
     )
 
 
-    console.log(
-      '[WalletButton] ACCOUNT SYNC SUCCESS',
-    )
 
-    console.log(
-      '[WalletButton] Active account:',
-      normalizedAccount,
-    )
 
 
     return normalizedAccount
@@ -412,10 +375,6 @@ function WalletButton() {
         : []
 
 
-    console.log(
-      '[WalletButton] eth_accounts returned:',
-      accounts,
-    )
 
 
     if (
@@ -469,18 +428,8 @@ function WalletButton() {
     accountOverride?: string | null,
   ) {
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] ACCOUNT SYNC',
-      source,
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     try {
@@ -511,10 +460,6 @@ function WalletButton() {
             accountOverride,
           )
 
-        console.log(
-          '[WalletButton] Using account supplied by accountsChanged event:',
-          account,
-        )
 
       } else {
 
@@ -531,9 +476,6 @@ function WalletButton() {
         !account
       ) {
 
-        console.log(
-          '[WalletButton] No MetaMask account connected.',
-        )
 
         clearWalletState()
 
@@ -542,9 +484,8 @@ function WalletButton() {
 
 
       return applyWalletAccount(
-        account,
-        source,
-      )
+            account,
+          )
 
     } catch (syncError) {
 
@@ -605,17 +546,8 @@ function WalletButton() {
     }
 
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] CONNECT requested by user.',
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     try {
@@ -646,10 +578,6 @@ function WalletButton() {
           : []
 
 
-      console.log(
-        '[WalletButton] eth_requestAccounts returned:',
-        accounts,
-      )
 
 
       if (
@@ -684,21 +612,12 @@ function WalletButton() {
       // Do not call eth_requestAccounts again.
       // ------------------------------------------------
 
-      const connectedAccount =
-        applyWalletAccount(
+      applyWalletAccount(
           account,
-          'CONNECT',
         )
 
 
-      console.log(
-        '[WalletButton] CONNECT SUCCESS',
-      )
 
-      console.log(
-        '[WalletButton] Connected account:',
-        connectedAccount,
-      )
 
     } catch (connectError: any) {
 
@@ -774,17 +693,8 @@ function WalletButton() {
     }
 
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] MANUAL ACCOUNT SYNC requested by user.',
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     try {
@@ -842,17 +752,8 @@ function WalletButton() {
       getEthereum()
 
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] DISCONNECT requested by user.',
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     try {
@@ -899,9 +800,6 @@ function WalletButton() {
           })
 
 
-          console.log(
-            '[WalletButton] MetaMask dApp permission revoked.',
-          )
 
         } catch (revokeError) {
 
@@ -924,10 +822,6 @@ function WalletButton() {
             await readCurrentMetaMaskAccount()
 
 
-          console.log(
-            '[WalletButton] MetaMask account after disconnect:',
-            accounts,
-          )
 
 
           if (
@@ -953,17 +847,8 @@ function WalletButton() {
       }
 
 
-      console.log(
-        '[WalletButton] Frontend wallet disconnected.',
-      )
 
-      console.log(
-        '[WalletButton] Transaction history was NOT deleted.',
-      )
 
-      console.log(
-        '==================================================',
-      )
 
     } finally {
 
@@ -1007,22 +892,9 @@ function WalletButton() {
         : []
 
 
-    console.log(
-      '==================================================',
-    )
 
-    console.log(
-      '[WalletButton] MetaMask accountsChanged',
-    )
 
-    console.log(
-      '[WalletButton] New accounts:',
-      accounts,
-    )
 
-    console.log(
-      '==================================================',
-    )
 
 
     // --------------------------------------------------
@@ -1033,9 +905,6 @@ function WalletButton() {
       accounts.length === 0
     ) {
 
-      console.log(
-        '[WalletButton] MetaMask account disconnected.',
-      )
 
       clearWalletState()
 
@@ -1084,33 +953,12 @@ function WalletButton() {
   // ====================================================
 
   function handleChainChanged(
-    ...args: unknown[]
-  ) {
-
-    const chainId =
-      typeof args[0] === 'string'
-        ? args[0]
-        : ''
-
-
-    console.log(
-      '==================================================',
-    )
-
-    console.log(
-      '[WalletButton] MetaMask chainChanged:',
-      chainId,
-    )
-
-    console.log(
-      '==================================================',
-    )
-
-
-    void syncWalletAccount(
-      'CHAIN_CHANGED',
-    )
-  }
+        ..._args: unknown[]
+      ) {
+        void syncWalletAccount(
+          'CHAIN_CHANGED',
+        )
+      }
 
 
   // ====================================================
@@ -1133,9 +981,6 @@ function WalletButton() {
       getEthereum()
 
 
-    console.log(
-      '[WalletButton] Initializing wallet...',
-    )
 
 
     if (
@@ -1167,9 +1012,6 @@ function WalletButton() {
     // Register MetaMask listeners.
     // --------------------------------------------------
 
-    console.log(
-      '[WalletButton] Registering MetaMask listeners...',
-    )
 
 
     if (
@@ -1188,9 +1030,6 @@ function WalletButton() {
     }
 
 
-    console.log(
-      '[WalletButton] MetaMask listeners registered.',
-    )
 
 
     // --------------------------------------------------
@@ -1219,9 +1058,6 @@ function WalletButton() {
       }
 
 
-      console.log(
-        '[WalletButton] MetaMask listeners removed.',
-      )
     }
 
     // The listener registration intentionally happens

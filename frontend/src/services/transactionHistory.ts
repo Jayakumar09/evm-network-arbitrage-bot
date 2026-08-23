@@ -1177,13 +1177,7 @@ export function subscribeToTransactionUpdates(
   // ====================================================
 
   return () => {
-
-    console.log(
-      '[TRANSACTION DEBUG] Transaction history subscription cleanup.',
-    )
-
-
-    window.removeEventListener(
+      window.removeEventListener(
       TRANSACTION_HISTORY_EVENT,
       handleTransactionUpdate,
     )

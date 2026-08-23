@@ -165,17 +165,11 @@ function ContractPage() {
     let refreshInProgress = false
 
 
-    async function loadContractData(
-      source: string = 'UNKNOWN',
-      showLoading: boolean = false,
-    ) {
+    async function loadContractData() {
 
       if (refreshInProgress) {
 
-        console.log(
-          '[CONTRACT DEBUG] Refresh skipped - previous refresh still running.',
-        )
-
+        
         return
       }
 
@@ -183,22 +177,10 @@ function ContractPage() {
       refreshInProgress = true
 
 
-      console.log(
-        '====================================================',
-      )
-
-      console.log(
-        `[CONTRACT DEBUG] Refresh START - source: ${source}`,
-      )
-
-      console.log(
-        `[CONTRACT DEBUG] Time: ${new Date().toLocaleTimeString()}`,
-      )
-
-      console.log(
-        '====================================================',
-      )
-
+      
+      
+      
+      
 
       try {
 
@@ -207,28 +189,18 @@ function ContractPage() {
         }
 
 
-        if (showLoading) {
-          setLoading(true)
-        }
-
+        setLoading(true)
 
         // ------------------------------------------------
         // Connected wallet
         // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading connected wallet...',
-        )
-
+        
         const wallet =
           await getConnectedWalletAddress()
 
 
-        console.log(
-          '[CONTRACT DEBUG] Connected wallet:',
-          wallet,
-        )
-
+        
 
         if (!mounted) {
           return
@@ -246,19 +218,12 @@ function ContractPage() {
         // Contract owner
         // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading contract owner...',
-        )
-
+        
         const owner =
           await getExecutorOwner()
 
 
-        console.log(
-          '[CONTRACT DEBUG] Contract owner:',
-          owner,
-        )
-
+        
 
         if (!mounted) {
           return
@@ -278,11 +243,7 @@ function ContractPage() {
             owner.toLowerCase()
 
 
-        console.log(
-          '[CONTRACT DEBUG] Owner authorization:',
-          ownerStatus,
-        )
-
+        
 
         setIsOwner(
           ownerStatus,
@@ -293,19 +254,12 @@ function ContractPage() {
         // Paused status
         // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading contract paused status...',
-        )
-
+        
         const paused =
           await getExecutorPaused()
 
 
-        console.log(
-          '[CONTRACT DEBUG] Contract paused:',
-          paused,
-        )
-
+        
 
         if (!mounted) {
           return
@@ -323,10 +277,7 @@ function ContractPage() {
 
         if (!wallet) {
 
-          console.log(
-            '[CONTRACT DEBUG] No wallet connected. Resetting balances.',
-          )
-
+          
           setEthBalance('0.000000')
           setUsdcBalance('0.00')
           setWethBalance('0.000000')
@@ -344,10 +295,7 @@ function ContractPage() {
         // Read all balances
         // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Reading blockchain balances...',
-        )
-
+        
 
         const [
           eth,
@@ -382,41 +330,13 @@ function ContractPage() {
         // Debug raw values
         // ------------------------------------------------
 
-        console.log(
-          '[CONTRACT DEBUG] Executor ETH:',
-          eth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Executor USDC:',
-          usdc,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Executor WETH:',
-          weth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet ETH:',
-          walletEth,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet USDC:',
-          walletUsdc,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet Circle USDC:',
-          walletCircleUsdc,
-        )
-
-        console.log(
-          '[CONTRACT DEBUG] Wallet WETH:',
-          walletWeth,
-        )
-
+        
+        
+        
+        
+        
+        
+        
 
         // ------------------------------------------------
         // Executor balances
@@ -456,17 +376,10 @@ function ContractPage() {
         )
 
 
-        console.log(
-          '[CONTRACT DEBUG] UI balances updated successfully.',
-        )
-
+        
       } catch (error) {
 
-        console.error(
-          '[CONTRACT DEBUG] Failed to load contract data:',
-          error,
-        )
-
+        
 
         if (!mounted) {
           return
@@ -488,17 +401,13 @@ function ContractPage() {
 
 
         if (
-          mounted &&
-          showLoading
+          mounted
         ) {
           setLoading(false)
         }
 
 
-        console.log(
-          `[CONTRACT DEBUG] Refresh END - source: ${source}`,
-        )
-      }
+              }
     }
 
 
@@ -506,15 +415,8 @@ function ContractPage() {
     // Initial load
     // ==================================================
 
-    console.log(
-      '[CONTRACT DEBUG] ContractPage mounted.',
-    )
-
-    loadContractData(
-      'INITIAL_LOAD',
-      true,
-    )
-
+    
+    loadContractData()
 
     // ==================================================
     // Automatic refresh
@@ -526,9 +428,7 @@ function ContractPage() {
       window.setInterval(
         () => {
 
-          loadContractData(
-            'AUTO_REFRESH',
-          )
+          loadContractData()
 
         },
         5000,
@@ -545,10 +445,7 @@ function ContractPage() {
 
     if (!ethereum) {
 
-      console.warn(
-        '[CONTRACT DEBUG] MetaMask / window.ethereum not available.',
-      )
-
+      
 
       return () => {
 
@@ -568,13 +465,8 @@ function ContractPage() {
     const handleAccountsChanged =
       () => {
 
-        console.log(
-          '[CONTRACT DEBUG] MetaMask account changed.',
-        )
-
-        loadContractData(
-          'METAMASK_ACCOUNT_CHANGED',
-        )
+        
+        loadContractData()
       }
 
 
@@ -585,13 +477,8 @@ function ContractPage() {
     const handleChainChanged =
       () => {
 
-        console.log(
-          '[CONTRACT DEBUG] MetaMask network changed.',
-        )
-
-        loadContractData(
-          'METAMASK_CHAIN_CHANGED',
-        )
+        
+        loadContractData()
       }
 
 
@@ -602,13 +489,8 @@ function ContractPage() {
     const handleWindowFocus =
       () => {
 
-        console.log(
-          '[CONTRACT DEBUG] Browser window focused - refreshing.',
-        )
-
-        loadContractData(
-          'WINDOW_FOCUS',
-        )
+        
+        loadContractData()
       }
 
 
@@ -624,13 +506,8 @@ function ContractPage() {
           'visible'
         ) {
 
-          console.log(
-            '[CONTRACT DEBUG] Page became visible - refreshing.',
-          )
-
-          loadContractData(
-            'PAGE_VISIBLE',
-          )
+          
+          loadContractData()
         }
       }
 
@@ -666,10 +543,7 @@ function ContractPage() {
 
     return () => {
 
-      console.log(
-        '[CONTRACT DEBUG] ContractPage unmounted. Cleaning up.',
-      )
-
+      
       mounted = false
 
       window.clearInterval(
@@ -721,30 +595,19 @@ function ContractPage() {
       setOwnerActionError('')
 
 
-      console.log(
-        '[CONTRACT DEBUG] Starting Executor pause...',
-      )
-
+      
 
       const transactionHash =
         await emergencyPauseExecutor()
 
 
-      console.log(
-        '[CONTRACT DEBUG] Executor pause confirmed:',
-        transactionHash,
-      )
-
+      
 
       const paused =
         await getExecutorPaused()
 
 
-      console.log(
-        '[CONTRACT DEBUG] Executor paused state after transaction:',
-        paused,
-      )
-
+      
 
       setIsPaused(
         paused,
@@ -757,11 +620,7 @@ function ContractPage() {
 
     } catch (error) {
 
-      console.error(
-        '[CONTRACT DEBUG] Failed to pause Executor:',
-        error,
-      )
-
+      
 
       setOwnerActionError(
         error instanceof Error
@@ -797,30 +656,19 @@ function ContractPage() {
       setOwnerActionError('')
 
 
-      console.log(
-        '[CONTRACT DEBUG] Starting Executor unpause...',
-      )
-
+      
 
       const transactionHash =
         await emergencyUnpauseExecutor()
 
 
-      console.log(
-        '[CONTRACT DEBUG] Executor unpause confirmed:',
-        transactionHash,
-      )
-
+      
 
       const paused =
         await getExecutorPaused()
 
 
-      console.log(
-        '[CONTRACT DEBUG] Executor paused state after transaction:',
-        paused,
-      )
-
+      
 
       setIsPaused(
         paused,
@@ -833,11 +681,7 @@ function ContractPage() {
 
     } catch (error) {
 
-      console.error(
-        '[CONTRACT DEBUG] Failed to unpause Executor:',
-        error,
-      )
-
+      
 
       setOwnerActionError(
         error instanceof Error
@@ -901,11 +745,7 @@ function ContractPage() {
       setOwnerActionError('')
 
 
-      console.log(
-        '[CONTRACT DEBUG] Starting ownership transfer:',
-        targetAddress,
-      )
-
+      
 
       const transactionHash =
         await transferExecutorOwnership(
@@ -913,11 +753,7 @@ function ContractPage() {
         )
 
 
-      console.log(
-        '[CONTRACT DEBUG] Ownership transfer confirmed:',
-        transactionHash,
-      )
-
+      
 
       // ------------------------------------------------
       // Re-read actual owner from blockchain
@@ -959,11 +795,7 @@ function ContractPage() {
 
     } catch (error) {
 
-      console.error(
-        '[CONTRACT DEBUG] Failed to transfer ownership:',
-        error,
-      )
-
+      
 
       setOwnerActionError(
         error instanceof Error

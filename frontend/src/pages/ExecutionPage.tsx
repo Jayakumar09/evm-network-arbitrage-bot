@@ -1,6 +1,7 @@
 // ======================================================
 // Execution Page
 // Ethereum Sepolia
+// Production cleanup: verbose transaction/debug console output removed.
 // ======================================================
 
 import {
@@ -354,10 +355,7 @@ async function getEthUsdPrice(): Promise<number> {
 
   try {
 
-    console.log(
-      '[ETH/USD DEBUG] Fetching ETH/USD price...',
-    )
-
+    
     const response =
       await fetch(
         PRICE_URL,
@@ -372,11 +370,7 @@ async function getEthUsdPrice(): Promise<number> {
 
     if (!response.ok) {
 
-      console.warn(
-        '[ETH/USD DEBUG] Price provider returned:',
-        response.status,
-      )
-
+      
       return 0
     }
 
@@ -395,19 +389,11 @@ async function getEthUsdPrice(): Promise<number> {
       ethUsdPrice <= 0
     ) {
 
-      console.warn(
-        '[ETH/USD DEBUG] Invalid ETH/USD response:',
-        data,
-      )
-
+      
       return 0
     }
 
-    console.log(
-      '[ETH/USD DEBUG] ETH/USD price:',
-      ethUsdPrice,
-    )
-
+    
     return ethUsdPrice
 
   } catch (error) {
@@ -419,11 +405,7 @@ async function getEthUsdPrice(): Promise<number> {
     // blockchain transaction into a failed execution.
     // --------------------------------------------------
 
-    console.warn(
-      '[ETH/USD DEBUG] Price lookup unavailable:',
-      error,
-    )
-
+    
     return 0
   }
 }
@@ -821,7 +803,7 @@ function ExecutionPage() {
       } catch (accessError) {
 
         console.error(
-          '[EXECUTION DEBUG] Failed to refresh executor access:',
+          'Failed to refresh executor access:',
           accessError,
         )
 
@@ -965,107 +947,18 @@ function ExecutionPage() {
         // Encoded Parameter Diagnostics
         // ------------------------------------------------
 
-        console.log(
-          '[EXECUTION DEBUG] Encoded params length:',
-          params.length,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Encoded params:',
-          params,
-        )
-
         // ------------------------------------------------
         // Pre-flight simulation
         // ------------------------------------------------
 
-        console.log(
-          '==================================================',
-        )
+        
 
-        console.log(
-          '[EXECUTION DEBUG] Flash Loan Simulation START',
-        )
+        
 
-        console.log(
-          '[EXECUTION DEBUG] Token In:',
-          opportunity.tokenIn,
-        )
+        
 
-        console.log(
-          '[EXECUTION DEBUG] Token Out:',
-          opportunity.tokenOut,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Token In Decimals:',
-          tokenInDecimals,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Loan Amount Raw:',
-          amount.toString(),
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Loan Amount Formatted:',
-          opportunity.loanAmount,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] First DEX:',
-          firstDex,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Uni Fee:',
-          opportunity.uniFee,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Output #1:',
-          opportunity.minOut1,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Output #1 Raw:',
-          toTokenUnits(
-            opportunity.minOut1,
-            getTokenDecimals(tokenOutAddress),
-          ).toString(),
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Output #2:',
-          opportunity.minOut2,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Output #2 Raw:',
-          toTokenUnits(
-            opportunity.minOut2,
-            tokenInDecimals,
-          ).toString(),
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Profit:',
-          opportunity.minProfit,
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Minimum Profit Raw:',
-          toTokenUnits(
-            opportunity.minProfit,
-            tokenInDecimals,
-          ).toString(),
-        )
-
-        console.log(
-          '[EXECUTION DEBUG] Params:',
-          params,
-        )
-
+        
+        
                try {
 
           // ------------------------------------------------
@@ -1088,11 +981,7 @@ function ExecutionPage() {
               params,
             )
 
-          console.log(
-            '[EXECUTION DEBUG] Simulation result:',
-            simulationResult,
-          )
-
+          
           // ------------------------------------------------
           // HARD SAFETY GATE
           // ------------------------------------------------
@@ -1100,11 +989,11 @@ function ExecutionPage() {
           if (!simulationResult) {
 
             console.error(
-              '[EXECUTION DEBUG] Flash Loan Simulation FAILED',
+              'Flash loan simulation failed:',
             )
 
             console.error(
-              '[EXECUTION DEBUG] Real transaction BLOCKED.',
+              'Real transaction blocked by simulation.',
             )
 
             setExecutionState(
@@ -1122,63 +1011,14 @@ function ExecutionPage() {
           // Simulation passed
           // ------------------------------------------------
 
-          console.log(
-            '[EXECUTION DEBUG] Flash Loan Simulation SUCCESS',
-          )
-
-          console.log(
-            '[EXECUTION DEBUG] Simulation passed. Transaction may proceed.',
-          )
-
         } catch (simulationError) {
 
           console.error(
-            '[EXECUTION DEBUG] Flash Loan Simulation FAILED',
+            'Flash loan simulation failed:',
             simulationError,
           )
 
-          // ------------------------------------------------
-          // Extract detailed ethers error information
-          // ------------------------------------------------
 
-          if (
-            simulationError &&
-            typeof simulationError === 'object'
-          ) {
-
-            const error =
-              simulationError as Record<string, unknown>
-
-            console.error(
-              '[EXECUTION DEBUG] Error code:',
-              error.code,
-            )
-
-            console.error(
-              '[EXECUTION DEBUG] Error reason:',
-              error.reason,
-            )
-
-            console.error(
-              '[EXECUTION DEBUG] Error shortMessage:',
-              error.shortMessage,
-            )
-
-            console.error(
-              '[EXECUTION DEBUG] Error data:',
-              error.data,
-            )
-
-            console.error(
-              '[EXECUTION DEBUG] Error transaction:',
-              error.transaction,
-            )
-
-            console.error(
-              '[EXECUTION DEBUG] Error info:',
-              error.info,
-            )
-          }
 
           setExecutionState(
             'FAILED',
@@ -1192,14 +1032,6 @@ function ExecutionPage() {
 
           return
         }
-
-        console.log(
-          '[EXECUTION DEBUG] Flash Loan Simulation END',
-        )
-
-        console.log(
-          '==================================================',
-        )
 
         // ------------------------------------------------
         // Transaction Pending
@@ -1244,11 +1076,7 @@ function ExecutionPage() {
           hash,
         )
 
-        console.log(
-          '[EXECUTION DEBUG] Transaction submitted:',
-          hash,
-        )
-
+        
         // ------------------------------------------------
         // Close Confirmation Dialog
         // ------------------------------------------------
@@ -1295,7 +1123,7 @@ function ExecutionPage() {
           if (!opportunity) {
 
             console.error(
-              '[EXECUTION RESULT] Cannot process transaction: opportunity is missing.',
+              'Cannot process confirmed transaction: opportunity is missing.',
             )
 
             return
@@ -1317,7 +1145,7 @@ function ExecutionPage() {
           if (!transactionHash) {
 
             console.error(
-              '[EXECUTION RESULT] Cannot process transaction: hash is missing.',
+              'Cannot process confirmed transaction: hash is missing.',
             )
 
             return
@@ -1330,19 +1158,7 @@ function ExecutionPage() {
 
           try {
 
-            console.log(
-              '==================================================',
-            )
-
-            console.log(
-              '[TRANSACTION RESULT] Loading transaction result...',
-            )
-
-            console.log(
-              '[TRANSACTION RESULT] Transaction hash:',
-              transactionHash,
-            )
-
+            
 
             const result =
               await getFlashLoanTransactionResult(
@@ -1363,28 +1179,8 @@ function ExecutionPage() {
             // Debug result
             // --------------------------------------------------
 
-            console.log(
-              '[TRANSACTION RESULT] RESULT:',
-              result,
-            )
-
-            console.log(
-              '[TRANSACTION RESULT] STATUS:',
-              result.status,
-            )
-
-            console.log(
-              '[TRANSACTION RESULT] OPPORTUNITY:',
-              confirmedOpportunity,
-            )
-
-            console.log(
-              '[TRANSACTION RESULT] BEFORE LOCAL STORAGE:',
-              localStorage.getItem(
-                'flashloan_arbitrage_transaction_history',
-              ),
-            )
-
+            
+            
 
             // ==================================================
             // SUCCESS TRANSACTION
@@ -1393,11 +1189,6 @@ function ExecutionPage() {
             if (
               result.status === true
             ) {
-
-              console.log(
-                '[TRANSACTION SAVE] SUCCESS status confirmed.',
-              )
-
 
               // ------------------------------------------------
               // Calculate Gross Profit
@@ -1437,12 +1228,6 @@ function ExecutionPage() {
 
               const ethUsdPrice =
                 await getEthUsdPrice()
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] ETH/USD:',
-                ethUsdPrice,
-              )
-
 
               // ------------------------------------------------
               // Calculate Gas Cost in USD
@@ -1514,32 +1299,7 @@ function ExecutionPage() {
                     ethUsdPrice,
                   })
 
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] Gross Profit:',
-                grossProfitUsdc,
-              )
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] Aave Premium:',
-                aavePremiumUsdc,
-              )
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] Net Before Gas:',
-                netBeforeGasUsdc,
-              )
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] Gas Cost USD:',
-                gasCostUsd,
-              )
-
-              console.log(
-                '[TRANSACTION PROFIT DEBUG] FINAL Net Profit:',
-                netProfitUsdc,
-              )
-
+              
 
               // ------------------------------------------------
               // Build SUCCESS transaction record
@@ -1584,19 +1344,6 @@ function ExecutionPage() {
               // Debug SUCCESS transaction record
               // ------------------------------------------------
 
-              console.log(
-                '[TRANSACTION SAVE] SUCCESS TRANSACTION RECORD:',
-                transactionRecord,
-              )
-
-              console.log(
-                '[TRANSACTION SAVE] BEFORE SAVE:',
-                localStorage.getItem(
-                  'flashloan_arbitrage_transaction_history',
-                ),
-              )
-
-
               // ------------------------------------------------
               // Save SUCCESS transaction
               // ------------------------------------------------
@@ -1610,31 +1357,11 @@ function ExecutionPage() {
               // Verify localStorage
               // ------------------------------------------------
 
-              console.log(
-                '[TRANSACTION SAVE] AFTER SAVE:',
-                localStorage.getItem(
-                  'flashloan_arbitrage_transaction_history',
-                ),
-              )
-
-              console.log(
-                '[TRANSACTION SAVE] SUCCESS transaction saved successfully.',
-              )
-
             } else {
 
               // ==================================================
               // FAILED TRANSACTION
               // ==================================================
-
-              console.warn(
-                '[TRANSACTION SAVE] Flash loan result returned FAILED.',
-                {
-                  status: result.status,
-                  transactionHash,
-                },
-              )
-
 
               // ------------------------------------------------
               // Build FAILED transaction record
@@ -1683,19 +1410,6 @@ function ExecutionPage() {
               // Debug FAILED transaction record
               // ------------------------------------------------
 
-              console.log(
-                '[TRANSACTION SAVE] FAILED TRANSACTION RECORD:',
-                failedTransactionRecord,
-              )
-
-              console.log(
-                '[TRANSACTION SAVE] BEFORE FAILED SAVE:',
-                localStorage.getItem(
-                  'flashloan_arbitrage_transaction_history',
-                ),
-              )
-
-
               // ------------------------------------------------
               // Save FAILED transaction
               // ------------------------------------------------
@@ -1709,22 +1423,8 @@ function ExecutionPage() {
               // Verify localStorage
               // ------------------------------------------------
 
-              console.log(
-                '[TRANSACTION SAVE] AFTER FAILED SAVE:',
-                localStorage.getItem(
-                  'flashloan_arbitrage_transaction_history',
-                ),
-              )
-
-              console.log(
-                '[TRANSACTION SAVE] FAILED transaction saved.',
-              )
-            }
-
-
-            console.log(
-              '==================================================',
-            )
+              
+                          }
 
           } catch (error) {
 
@@ -1733,7 +1433,7 @@ function ExecutionPage() {
             // ==================================================
 
             console.error(
-              '[EXECUTION RESULT] Failed to load transaction result:',
+              'Failed to load confirmed transaction result:',
               error,
             )
 
@@ -1831,16 +1531,7 @@ function ExecutionPage() {
                 new Date().toLocaleString(),
             }
 
-
-            console.log(
-              '[TRANSACTION SAVE] RESULT DECODE FAILED.',
-            )
-
-            console.log(
-              '[TRANSACTION SAVE] FAILED TRANSACTION RECORD:',
-              failedTransactionRecord,
-            )
-
+            
 
             // --------------------------------------------------
             // Save failed transaction
@@ -1851,10 +1542,7 @@ function ExecutionPage() {
             )
 
 
-            console.log(
-              '[TRANSACTION SAVE] FAILED transaction saved after result-processing error.',
-            )
-          }
+                      }
 
 
           // ====================================================
@@ -1893,7 +1581,7 @@ function ExecutionPage() {
           } catch (error) {
 
             console.error(
-              '[EXECUTION RESULT] Failed to refresh executor status:',
+              'Failed to refresh executor status:',
               error,
             )
           }
