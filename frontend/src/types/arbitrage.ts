@@ -34,7 +34,10 @@ export interface ArbitrageOpportunity {
 
   minOut1: string
   minOut2: string
-  minProfit: string
+    minProfit: string
+
+  // Timestamp when the two-leg quote was completed
+  quoteTimestamp: number
 
   isProfitable: boolean
   isStale: boolean

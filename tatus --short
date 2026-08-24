@@ -1,0 +1,177 @@
+warning: in the working copy of 'frontend/src/services/transactionHistory.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/frontend/src/services/transactionHistory.ts b/frontend/src/services/transactionHistory.ts[m
+[1mindex e4b12ddf..43675d4b 100644[m
+[1m--- a/frontend/src/services/transactionHistory.ts[m
+[1m+++ b/frontend/src/services/transactionHistory.ts[m
+[36m@@ -13,9 +13,26 @@[m
+ //[m
+ // Existing legacy history is migrated ONCE to the[m
+ // currently connected wallet.[m
+[32m+[m[32m//[m
+[32m+[m[32m// Historical ARBITRAGE records are additionally[m
+[32m+[m[32m// RECONCILED once against the blockchain: every retained[m
+[32m+[m[32m// arbitrage record must have a real successful on-chain[m
+[32m+[m[32m// ArbitrageProfit event, and its chain-derived fields are[m
+[32m+[m[32m// rewritten from that event.[m
+ // ======================================================[m
+ [m
+ [m
+[32m+[m[32mimport {[m
+[32m+[m[32m  formatUnits,[m
+[32m+[m[32m  Interface,[m
+[32m+[m[32m} from 'ethers'[m
+[32m+[m
+[32m+[m[32mimport {[m
+[32m+[m[32m  getFlashLoanTransactionResult,[m
+[32m+[m[32m  getProvider,[m
+[32m+[m[32m} from './blockchain'[m
+[32m+[m
+[32m+[m
+ // ======================================================[m
+ // Base Storage Configuration[m
+ // ======================================================[m
+[36m@@ -53,11 +70,156 @@[m [mconst LEGACY_TRANSACTION_HISTORY_KEY =[m
+ [m
+ [m
+ // ======================================================[m
+[31m-// Wallet History Migration[m
+[32m+[m[32m// Wallet History Migration (v4)[m
+[32m+[m[32m//[m
+[32m+[m[32m// v3 copied the legacy global history wholesale into the[m
+[32m+[m[32m// wallet-scoped history.[m
+[32m+[m[32m//[m
+[32m+[m[32m// v4 keeps the one-time behaviour but ONLY imports[m
+[32m+[m[32m// records whose hashes are not already present in the[m
+[32m+[m[32m// wallet-scoped history. This prevents duplicates when a[m
+[32m+[m[32m// legacy key overlaps already reconciled data.[m
+[32m+[m[32m//[m
+[32m+[m[32m// The old global key is intentionally NOT deleted here.[m
+ // ======================================================[m
+ [m
+ const WALLET_HISTORY_MIGRATION_KEY =[m
+[31m-  'flashloan_arbitrage_transaction_history_wallet_v3_migrated'[m
+[32m+[m[32m  'flashloan_arbitrage_transaction_history_wallet_v4_migrated'[m
+[32m+[m
+[32m+[m
+[32m+[m[32m// ======================================================[m
+[32m+[m[32m// Chain Reconciliation Migration[m
+[32m+[m[32m//[m
+[32m+[m[32m// One-time, versioned migration that validates every[m
+[32m+[m[32m// stored ARBITRAGE record against its on-chain receipt[m
+[32m+[m[32m// and rewrites the chain-derived fields from the[m
+[32m+[m[32m// authoritative Executor events.[m
+[32m+[m[32m//[m
+[32m+[m[32m// A deterministic backup of the pre-migration history is[m
+[32m+[m[32m// written once before anything is modified.[m
+[32m+[m[32m// ======================================================[m
+[32m+[m
+[32m+[m[32m// ------------------------------------------------------[m
+[32m+[m[32m// V3 RECONCILIATION[m
+[32m+[m[32m//[m
+[32m+[m[32m// History of this project spans TWO Executor deployments.[m
+[32m+[m[32m// The canonical wallet-history storage key is UNCHANGED[m
+[32m+[m[32m// (chainId + current executor + wallet). The known[m
+[32m+[m[32m// executor list below is RECONCILIATION SCOPE ONLY — it[m
+[32m+[m[32m// never participates in the storage key, so existing[m
+[32m+[m[32m// records can never be stranded by a key change.[m
+[32m+[m[32m//[m
+[32m+[m[32m// v1 flag: committed prematurely against an empty dataset[m
+[32m+[m[32m//          (inert).[m
+[32m+[m[32m// v2 flag: validated with a current-executor-only decoder,[m
+[32m+[m[32m//          misclassified 3 genuine OLD-executor trades as[m
+[32m+[m[32m//          "legacy-era" and could not see 4 missing trades[m
+[32m+[m[32m//          (inert).[m
+[32m+[m[32m//[m
+[32m+[m[32m// v3 performs:[m
+[32m+[m[32m//   Phase 1 — emitter-aware validation/rewrite of every[m
+[32m+[m[32m//             stored ARBITRAGE record against BOTH known[m
+[32m+[m[32m//             deployments.[m
+[32m+[m[32m//   Phase 2 — chain backfill of the four authoritative[m
+[32m+[m[32m//             arbitrage executions missing from storage.[m
+[32m+[m[32m//[m
+[32m+[m[32m// All-or-nothing: storage is written and the v3 flag is[m
+[32m+[m[32m// committed only when the final dataset is verified to[m
+[32m+[m[32m// contain exactly 23 valid records (6 old + 17 current),[m
+[32m+[m[32m// zero duplicates, zero unresolved chain lookups.[m
+[32m+[m[32m// ------------------------------------------------------[m
+[32m+[m
+[32m+[m[32mconst TRANSACTION_RECONCILE_MIGRATION_KEY =[m
+[32m+[m[32m  'flashloan_arbitrage_transaction_history_reconcile_v3_migrated'[m
+[32m+[m
+[32m+[m
+[32m+[m[32mconst RECONCILE_BACKUP_SUFFIX =[m
+[32m+[m[32m  '_backup_reconcile_v1'[m
+[32m+[m
+[32m+[m
+[32m+[m[32mconst RECONCILE_V3_BACKUP_SUFFIX =[m
+[32m+[m[32m  '_backup_reconcile_v3'[m
+[32m+[m
+[32m+[m
+[32m+[m[32m// ======================================================[m
+[32m+[m[32m// Known Executor Deployments (reconciliation scope)[m
+[32m+[m[32m// ======================================================[m
+[32m+[m
+[32m+[m[32mconst CURRENT_EXECUTOR_DEPLOYMENT =[m
+[32m+[m[32m  EXECUTOR_ADDRESS.toLowerCase()[m
+[32m+[m
+[32m+[m[32mconst OLD_EXECUTOR_DEPLOYMENT =[m
+[32m+[m[32m  '0x3ae7c844cae182bbb7dfe31cee3c4c1b729160d2'[m
+[32m+[m
+[32m+[m[32mconst KNOWN_EXECUTOR_DEPLOYMENTS = new Set<string>([m
+[32m+[m[32m  [[m
+[32m+[m[32m    CURRENT_EXECUTOR_DEPLOYMENT,[m
+[32m+[m
+[32m+[m[32m    OLD_EXECUTOR_DEPLOYMENT,[m
+[32m+[m[32m  ],[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m
+[32m+[m[32m// Expected authoritative composition after v3.[m
+[32m+[m
+[32m+[m[32mconst EXPECTED_TOTAL_ARBITRAGE_RECORDS =[m
+[32m+[m[32m  23[m
+[32m+[m
+[32m+[m[32mconst EXPECTED_OLD_EXECUTOR_RECORDS =[m
+[32m+[m[32m  6[m
+[32m+[m
+[32m+[m[32mconst EXPECTED_CURRENT_EXECUTOR_RECORDS =[m
+[32m+[m[32m  17[m
+[32m+[m
+[32m+[m
+[32m+[m[32m// ======================================================[m
+[32m+[m[32m// Authoritative executions proven on-chain but ABSENT[m
+[32m+[m[32m// from stored history. Values are never fabricated here —[m
+[32m+[m[32m// each hash is fully re-derived from its receipt/events[m
+[32m+[m[32m// during Phase 2. These are only the lookup list.[m
+[32m+[m[32m// ======================================================[m
+[32m+[m
+[32m+[m[32mconst MISSING_AUTHORITATIVE_HASHES = [[m
+[32m+[m
+[32m+[m[32m  // Old executor op 3[m
+[32m+[m[32m  '0x971371de9bd941d29be13342e74a910376c7005ac6f82593a2a2c4bbb7c5a0f7',[m
+[32m+[m
+[32m+[m[32m  // Old executor op 4[m
+[32m+[m[32m  '0xe1a13715f9cad5badc84a971c9b0c6579cc383337d6cf0c95759b441044afda4',[m
+[32m+[m
+[32m+[m[32m  // Old executor op 5[m
+[32m+[m[32m  '0x43ef5a82d83783ee43b36796a5a89291504b800717495ebfced1ace2407eb8b5',[m
+[32m+[m
+[32m+[m[32m  // Current executor op 3[m
+[32m+[m[32m  '0x5844e5b969dbc1dd79e9e4f4eb96b6ce87f503c344b57c30de12a2a7cb2f5cd3',[m
+[32m+[m
+[32m+[m[32m][m
+[32m+[m
+[32m+[m
+[32m+[m[32m// ======================================================[m
+[32m+[m[32m// Executor Event Interface (shared by BOTH deployments)[m
+[32m+[m[32m//[m
+[32m+[m[32m// Both contract versions emit identical event signatures;[m
+[32m+[m[32m// ethers decodes positionally against these fragments, so[m
+[32m+[m[32m// one interface serves both. Emitter routing happens via[m
+[32m+[m[32m// transaction.to / log.address — never via a single[m
+[32m+[m[32m// hard-coded executor scope.[m
+[32m+[m[32m// ======================================================[m
+[32m+[m
+[32m+[m[32mconst RECONCILE_EVENT_ABI = [[m
+[32m+[m
+[32m+[m[32m  'event FlashLoanExecuted(address indexed asset, uint256 amount, uint256

@@ -11,6 +11,11 @@ import type {
   TransactionHistoryItem,
 } from '../services/transactionHistory'
 
+import {
+  getStoredTransactions,
+  subscribeToTransactionUpdates,
+} from '../services/transactionHistory'
+
 function DashboardPage() {
   // ==================================================
   // Dashboard State
@@ -46,37 +51,17 @@ function DashboardPage() {
 
         // ----------------------------------------------
         // Transaction History
+        //
+        // Read through the wallet-scoped transaction
+        // history service — the SAME source of truth used
+        // by TransactionsPage (Network + Executor +
+        // Wallet). The bare legacy localStorage key must
+        // never be read directly.
         // ----------------------------------------------
 
-        // ----------------------------------------------
-        // Arbitrage Transaction History
-        // ----------------------------------------------
-
-        const storedTransactionData =
-          localStorage.getItem(
-            'flashloan_arbitrage_transaction_history',
-          )
-
-        let storedTransactions: TransactionHistoryItem[] = []
-
-        try {
-          const parsedTransactions =
-            JSON.parse(
-              storedTransactionData || '[]',
-            )
-
-          if (
-            Array.isArray(parsedTransactions)
-          ) {
-            storedTransactions =
-              parsedTransactions as TransactionHistoryItem[]
-          }
-        } catch (storageError) {
-          console.error(
-            '[DASHBOARD] Failed to parse arbitrage transaction history:',
-            storageError,
-          )
-        }
+        const storedTransactions:
+          TransactionHistoryItem[] =
+          getStoredTransactions()
 
         setTransactions(
           storedTransactions,
@@ -151,50 +136,52 @@ function DashboardPage() {
   }, [loadDashboardData])
 
   // ==================================================
-  // Refresh When Storage Changes
+  // Refresh When Transaction History Changes
+  //
+  // Uses the shared service subscription, which covers
+  // same-tab updates AND cross-tab updates for the
+  // currently active wallet-scoped history key.
   // ==================================================
 
   useEffect(() => {
-    const handleStorageChange = (
-      event: StorageEvent,
-    ) => {
-      if (
-        event.key ===
-          'flashloan_arbitrage_transaction_history' ||
-        event.key === null
-      ) {
-        void loadDashboardData()
-      }
-    }
-
-    window.addEventListener(
-      'storage',
-      handleStorageChange,
-    )
+    const unsubscribe =
+      subscribeToTransactionUpdates(
+        () => {
+          void loadDashboardData()
+        },
+      )
 
     return () => {
-      window.removeEventListener(
-        'storage',
-        handleStorageChange,
-      )
+      unsubscribe()
     }
   }, [loadDashboardData])
 
   // ==================================================
   // Dashboard Statistics
+  //
+  // Statistics are ARBITRAGE-only, matching the summary
+  // semantics on TransactionsPage. Withdrawal records
+  // stored in the same wallet-scoped history never count
+  // as trading activity.
   // ==================================================
 
+  const arbitrageTransactions =
+    transactions.filter(
+      (transaction) =>
+        transaction.type === 'ARBITRAGE',
+    )
+
   const totalTransactions =
-    transactions.length
+    arbitrageTransactions.length
 
   const successfulTransactions =
-    transactions.filter(
+    arbitrageTransactions.filter(
       (transaction) =>
         transaction.status === 'SUCCESS',
     ).length
 
   const totalNetProfit =
-    transactions.reduce(
+    arbitrageTransactions.reduce(
       (total, transaction) => {
         const value =
           Number(
@@ -213,7 +200,7 @@ function DashboardPage() {
     )
 
   const totalGrossProfit =
-    transactions.reduce(
+    arbitrageTransactions.reduce(
       (total, transaction) => {
         const value =
           Number(
@@ -232,8 +219,8 @@ function DashboardPage() {
     )
 
   const latestTransaction =
-    transactions.length > 0
-      ? transactions[0]
+    arbitrageTransactions.length > 0
+      ? arbitrageTransactions[0]
       : null
 
   // ==================================================

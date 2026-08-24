@@ -10,8 +10,10 @@ import {
 } from 'ethers'
 
 import {
+  auditReconciliationState,
   getStoredTransactions,
   migrateHistoricalAavePremium,
+  reconcileStoredTransactionsWithChain,
   subscribeToTransactionUpdates,
 } from '../services/transactionHistory'
 
@@ -1403,6 +1405,19 @@ function TransactionsPage() {
     // ==================================================
 
     void (async () => {
+
+      // ----------------------------------------------
+      // Chain reconciliation FIRST so every later
+      // consumer (premium migration, page totals) sees
+      // authoritative on-chain values.
+      // ----------------------------------------------
+
+      await reconcileStoredTransactionsWithChain()
+
+      // TEMPORARY READ-ONLY DIAGNOSTIC — remove after
+      // the reconciliation strategy is approved.
+
+      await auditReconciliationState()
 
       await migrateHistoricalAavePremium()
 

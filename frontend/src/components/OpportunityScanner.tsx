@@ -15,6 +15,7 @@ import {
   encodeFlashLoanArbitrageParams,
   estimateFlashLoanArbitrage,
   getProvider,
+  getAaveFlashLoanPremiumBps,
 } from '../services/blockchain'
 
 import {
@@ -26,6 +27,36 @@ import type {
   ArbitrageOpportunity,
   DexType,
 } from '../types/arbitrage'
+
+
+// ==================================================
+// Scanner Configuration
+// ==================================================
+
+const QUOTE_MAX_AGE_MS = 30_000
+
+// ------------------------------------------------------
+// Conservative ETH/USD reference price.
+//
+// Used ONLY when the external ETH/USD price provider is
+// temporarily unavailable.
+//
+// The value is deliberately HIGH so that gas cost is
+// OVERSTATED and estimated net profit is UNDERSTATED.
+//
+// Therefore this fallback can never publish a false
+// profitable opportunity, and a temporary price-provider
+// failure no longer destroys an otherwise valid
+// blockchain opportunity.
+//
+// DEX quotes and arbitrage calculations are NOT affected:
+// they come from the blockchain RPC providers, not from
+// this price.
+// ------------------------------------------------------
+
+const CONSERVATIVE_FALLBACK_ETH_USD_PRICE = 10_000
+
+// other existing constants...
 
 
 interface OpportunityScannerProps {
@@ -271,11 +302,24 @@ function OpportunityScanner({
       // Convert user amount to USDC raw units
       // ==================================================
 
-      const amountIn =
+     const amountIn =
         parseUnits(
           loanAmount,
           6,
         )
+
+      // ==================================================
+      // LIVE Aave Flash Loan Premium
+      // ==================================================
+
+      const flashLoanPremiumBps =
+        await getAaveFlashLoanPremiumBps()
+
+      console.log(
+        '[LIVE SCANNER] Aave flash-loan premium:',
+        flashLoanPremiumBps,
+        'bps',
+      )
 
 
       scannerLog(
@@ -307,9 +351,10 @@ function OpportunityScanner({
       // ==================================================
 
       const evaluateRoute = async (
-        routeFirstDex: DexType,
-        routeSecondDex: DexType,
-      ): Promise<ArbitrageOpportunity> => {
+          routeFirstDex: DexType,
+          routeSecondDex: DexType,
+          flashLoanPremiumBps: number,
+        ): Promise<ArbitrageOpportunity> => {
 
         scannerLog(
           '========================================',
@@ -430,12 +475,18 @@ function OpportunityScanner({
         }
 
 
+        // ==================================================
+        // Quote completed
+        // ==================================================
+
+        const quoteTimestamp =
+          Date.now()
+
         const amountOut2 =
           formatUnits(
             amountOut2Raw,
             6,
           )
-
 
         // ==================================================
         // Profit calculation
@@ -459,12 +510,23 @@ function OpportunityScanner({
 
 
         // ==================================================
-        // Aave Sepolia flash-loan premium
+        // LIVE Aave flash-loan premium
         // ==================================================
+        //
+        // FLASHLOAN_PREMIUM_TOTAL is returned in basis points.
+        //
+        // Example:
+        //   5 bps = 5 / 10,000 = 0.0005 = 0.05%
+        //
+        // Do NOT hard-code the premium here.
+        //
 
         const flashLoanFee =
           loanAmountNumber *
-          0.0005
+          (
+            flashLoanPremiumBps /
+            10_000
+          )
 
 
         // ==================================================
@@ -537,6 +599,26 @@ function OpportunityScanner({
 
 
         // ==================================================
+        // Minimum on-chain profit safety floor
+        // ==================================================
+
+        const minimumProfitSafety =
+          grossProfit > 0
+            ? grossProfit *
+              0.10
+            : 0
+
+        // ==================================================
+        // Final on-chain minimum profit
+        // ==================================================
+
+        const minProfit =
+          Math.max(
+            flashLoanFee,
+            minimumProfitSafety,
+          )
+
+        // ==================================================
         // REAL GAS ESTIMATION
         // ==================================================
         //
@@ -586,6 +668,37 @@ function OpportunityScanner({
         // result worse.
         // --------------------------------------------------
 
+        const firstDexNumber =
+          routeFirstDex ===
+          'UNISWAP_V3'
+            ? 0
+            : 1
+
+        // ==================================================
+        // Final Executor parameters
+        // ==================================================
+        //
+        // This is the exact parameter set that must be used
+        // by gas estimation, simulation and execution.
+        // ==================================================
+
+        const finalParams =
+          encodeFlashLoanArbitrageParams(
+            1,
+            firstDexNumber,
+            USDC_ADDRESS,
+            WETH_ADDRESS,
+            Number(
+              uniFee,
+            ),
+            minOut1Raw,
+            minOut2Raw,
+            parseUnits(
+              minProfit.toFixed(6),
+              6,
+            ),
+          )
+
         const preGasProfit =
           grossProfit -
           flashLoanFee -
@@ -628,39 +741,6 @@ function OpportunityScanner({
 
           try {
 
-            // ------------------------------------------------
-            // Solidity:
-            //
-            // 0 = Uniswap V3 → V2
-            // 1 = V2 → Uniswap V3
-            // ------------------------------------------------
-
-            const firstDexNumber =
-              routeFirstDex ===
-              'UNISWAP_V3'
-                ? 0
-                : 1
-
-            // ------------------------------------------------
-            // Build exact Executor parameters.
-            //
-            // minProfit = 0 is used ONLY for gas simulation.
-            // ------------------------------------------------
-
-            const estimationParams =
-              encodeFlashLoanArbitrageParams(
-                1,
-                firstDexNumber,
-                USDC_ADDRESS,
-                WETH_ADDRESS,
-                Number(
-                  uniFee,
-                ),
-                minOut1Raw,
-                minOut2Raw,
-                0n,
-              )
-
             scannerLog(
               '[LIVE SCANNER] Estimating real Executor gas...',
             )
@@ -686,7 +766,7 @@ function OpportunityScanner({
               await estimateFlashLoanArbitrage(
                 USDC_ADDRESS,
                 amountIn,
-                estimationParams,
+                finalParams,
               )
 
             // ------------------------------------------------
@@ -739,10 +819,37 @@ function OpportunityScanner({
 
             // ------------------------------------------------
             // ETH/USD price
+            //
+            // A temporary price-provider failure must NOT
+            // destroy an otherwise valid blockchain
+            // opportunity.
+            //
+            // When the live price is unavailable, fall back
+            // to CONSERVATIVE_FALLBACK_ETH_USD_PRICE, which
+            // OVERSTATES gas cost and therefore UNDERSTATES
+            // estimated net profit (safe direction).
+            //
+            // The arbitrage quotes themselves are NOT
+            // affected: they come from the DEX RPC calls.
             // ------------------------------------------------
 
-            const ethUsdPrice =
+            const liveEthUsdPrice =
               await getEthUsdPrice()
+
+            const ethUsdPrice =
+              liveEthUsdPrice > 0
+                ? liveEthUsdPrice
+                : CONSERVATIVE_FALLBACK_ETH_USD_PRICE
+
+            if (
+              liveEthUsdPrice <= 0
+            ) {
+
+              scannerWarn(
+                '[LIVE SCANNER] ETH/USD provider unavailable. Using conservative fallback:',
+                CONSERVATIVE_FALLBACK_ETH_USD_PRICE,
+              )
+            }
 
             if (
               !Number.isFinite(
@@ -752,7 +859,7 @@ function OpportunityScanner({
             ) {
 
               throw new Error(
-                'ETH/USD price unavailable. Gas cost cannot be valued safely.',
+                'Invalid ETH/USD price for gas valuation.',
               )
             }
 
@@ -851,24 +958,6 @@ function OpportunityScanner({
               estimatedGas -
               slippageCost -
               safetyBuffer
-
-
-        // ==================================================
-        // Minimum on-chain profit safety floor
-        // ==================================================
-
-        const minimumProfitSafety =
-          grossProfit > 0
-            ? grossProfit *
-              0.10
-            : 0
-
-
-        const minProfit =
-          Math.max(
-            flashLoanFee,
-            minimumProfitSafety,
-          )
 
 
         // ==================================================
@@ -1027,8 +1116,12 @@ function OpportunityScanner({
 
           isProfitable,
 
+          quoteTimestamp,
+
           isStale:
-            false,
+            Date.now() -
+              quoteTimestamp >
+            QUOTE_MAX_AGE_MS,
 
           status:
             'OPPORTUNITY_FOUND',
@@ -1054,6 +1147,7 @@ function OpportunityScanner({
         await evaluateRoute(
           'V2_COMPATIBLE',
           'UNISWAP_V3',
+          flashLoanPremiumBps,
         )
 
 
@@ -1071,6 +1165,7 @@ function OpportunityScanner({
         await evaluateRoute(
           'UNISWAP_V3',
           'V2_COMPATIBLE',
+          flashLoanPremiumBps,
         )
 
 
@@ -1241,9 +1336,66 @@ function OpportunityScanner({
       // ==================================================
       // Publish ONLY the best profitable opportunity
       // ==================================================
+      //
+      // IMPORTANT — quote freshness clock:
+      //
+      // Each route records quoteTimestamp when ITS own
+      // two-leg quote completed.
+      //
+      // Routes are evaluated sequentially, so for the FIRST
+      // evaluated route that timestamp can be many seconds
+      // old by the time scanning finishes:
+      //
+      //   - the winner's own gas estimation, gas price
+      //     lookup and ETH/USD lookup all run AFTER its
+      //     quoteTimestamp
+      //   - the second route is evaluated completely
+      //     afterwards
+      //
+      // Publishing the mid-scan timestamp would mark a
+      // freshly scanned opportunity as STALE before the
+      // user even reaches the Execution page.
+      //
+      // The 30-second freshness window protects the user's
+      // decision-to-execute window on the PUBLISHED
+      // snapshot, so the clock must start when the
+      // opportunity is published.
+      //
+      // On-chain validity is still enforced separately by
+      // the pre-flight simulation before any real
+      // transaction.
+      //
+
+      const publishedAt =
+        Date.now()
+
+      const publishDelayMs =
+        publishedAt -
+        bestOpportunity.quoteTimestamp
+
+
+      console.log(
+        '[LIVE SCANNER] Quote assembly delay:',
+        `${(publishDelayMs / 1000).toFixed(1)}s`,
+        '— freshness clock starts at publish time.',
+      )
+
+
+      const publishedOpportunity = {
+        ...bestOpportunity,
+
+        quoteTimestamp:
+          publishedAt,
+
+        isStale:
+          Date.now() -
+            publishedAt >
+          QUOTE_MAX_AGE_MS,
+      }
+
 
       onOpportunityFound(
-        bestOpportunity,
+        publishedOpportunity,
       )
 
 

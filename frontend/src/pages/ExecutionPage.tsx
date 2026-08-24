@@ -1,7 +1,7 @@
 // ======================================================
 // Execution Page
 // Ethereum Sepolia
-// Production cleanup: verbose transaction/debug console output removed.
+// Production cleanup: execution debug console output removed.
 // ======================================================
 
 import {
@@ -41,6 +41,25 @@ import {
   saveTransaction,
 } from '../services/transactionHistory'
 
+// ==================================================
+// Scanner Configuration
+// ==================================================
+
+const QUOTE_MAX_AGE_MS = 30_000
+
+function isOpportunityQuoteStale(
+  quoteTimestamp: number,
+): boolean {
+  return (
+    Date.now() -
+      quoteTimestamp >
+    QUOTE_MAX_AGE_MS
+  )
+}
+
+
+
+ 
 
 // ======================================================
 // Transaction State
@@ -423,6 +442,7 @@ function ExecutionPage() {
 
   const {
     opportunity,
+    clearOpportunity,
   } = useArbitrage()
 
 
@@ -452,6 +472,19 @@ function ExecutionPage() {
     executionError,
     setExecutionError,
   ] = useState<string | null>(null)
+
+
+  // ====================================================
+  // Quote Age Refresh
+  //
+  // Force a re-render every second so the quote status
+  // changes automatically from CURRENT to STALE after
+  // QUOTE_MAX_AGE_MS without a browser refresh.
+  // ====================================================
+
+  const [, setQuoteAgeTick] =
+    useState(0)
+
 
   // ====================================================
   // Flash Loan Execution Result
@@ -650,6 +683,47 @@ function ExecutionPage() {
 
 
   // ====================================================
+  // Quote Age Refresh
+  //
+  // The opportunity quote is valid only for
+  // QUOTE_MAX_AGE_MS (30 seconds).
+  //
+  // This timer only forces a React re-render.
+  // It does NOT modify the opportunity or quote data.
+  // ====================================================
+
+  useEffect(() => {
+
+    if (
+      !opportunity?.quoteTimestamp
+    ) {
+      return
+    }
+
+
+    const timer =
+      window.setInterval(() => {
+
+        setQuoteAgeTick(
+          (value) => value + 1,
+        )
+
+      }, 1000)
+
+
+    return () => {
+
+      window.clearInterval(
+        timer,
+      )
+    }
+
+  }, [
+    opportunity?.quoteTimestamp,
+  ])
+
+
+  // ====================================================
   // No Opportunity
   // ====================================================
 
@@ -683,7 +757,10 @@ function ExecutionPage() {
 
           <button
             type="button"
-            onClick={() => navigate('/scanner')}
+            onClick={() => {
+              clearOpportunity()
+              navigate('/scanner')
+            }}
             className="mt-6 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
           >
             Go to Scanner
@@ -720,376 +797,366 @@ function ExecutionPage() {
   // ====================================================
 
   const firstDex =
-    opportunity.firstDex === 'UNISWAP_V3'
-      ? 0
-      : 1
+  opportunity.firstDex === 'UNISWAP_V3'
+    ? 0
+    : 1
+
+  const quoteAgeMs =
+  Date.now() -
+  opportunity.quoteTimestamp
+
+  const quoteIsStale =
+    quoteAgeMs >
+    QUOTE_MAX_AGE_MS
+
+
 
 
   // ====================================================
   // Execute Arbitrage
   // ====================================================
 
-        async function handleExecuteArbitrage() {
+  async function handleExecuteArbitrage() {
 
-      // --------------------------------------------------
-      // Opportunity Check
-      // --------------------------------------------------
+    // --------------------------------------------------
+    // Opportunity Check
+    // --------------------------------------------------
 
-      if (!opportunity) {
+    if (!opportunity) {
+      setExecutionError(
+        'No arbitrage opportunity available.',
+      )
+
+      return
+    }
+
+    setExecutionError(null)
+
+    // --------------------------------------------------
+    // Mark execution as in-flight IMMEDIATELY.
+    //
+    // This disables both execute buttons for the whole
+    // handler, so a rapid second click can never start a
+    // second simulation or open MetaMask twice.
+    // --------------------------------------------------
+
+    setExecutionState(
+      'WAITING_FOR_WALLET',
+    )
+
+    // --------------------------------------------------
+    // Wallet / Executor Access Check
+    //
+    // Refresh these values immediately before execution.
+    // This prevents an account or network change after
+    // the page was loaded from using stale access state.
+    // --------------------------------------------------
+
+    try {
+
+      const [
+        currentWallet,
+        currentOwner,
+        currentPaused,
+      ] = await Promise.all([
+        getConnectedWalletAddress(),
+        getExecutorOwner(),
+        getExecutorPaused(),
+      ])
+
+      setWalletAddress(currentWallet)
+
+      setIsOwner(
+        currentWallet !== null &&
+        currentWallet.toLowerCase() ===
+          currentOwner.toLowerCase(),
+      )
+
+      setIsPaused(currentPaused)
+      if (!currentWallet) {
+        setExecutionState(
+          'IDLE',
+        )
+
         setExecutionError(
-          'No arbitrage opportunity available.',
+          'Connect the Executor owner wallet before execution.',
         )
 
         return
       }
+
+      if (
+        currentWallet.toLowerCase() !==
+        currentOwner.toLowerCase()
+      ) {
+        setExecutionState(
+          'IDLE',
+        )
+
+        setExecutionError(
+          'Connected wallet is not the Executor owner.',
+        )
+
+        return
+      }
+
+      if (currentPaused) {
+        setExecutionState(
+          'IDLE',
+        )
+
+        setExecutionError(
+          'Executor contract is currently paused.',
+        )
+
+        return
+      }
+
+    } catch (accessError) {
+
+      console.error(
+        'Failed to refresh executor access:',
+        accessError,
+      )
+
+
+      setExecutionState(
+        'IDLE',
+      )
+
+      setExecutionError(
+        accessError instanceof Error
+          ? `Executor access check failed: ${accessError.message}`
+          : 'Executor access check failed.',
+      )
+
+      return
+    }
+
+    // --------------------------------------------------
+    // Opportunity Checks
+    // --------------------------------------------------
+
+    if (!opportunity.isProfitable) {
+
+      setExecutionState(
+        'IDLE',
+      )
+
+      setExecutionError(
+        'Opportunity is not profitable.',
+      )
+
+      return
+    }
+
+    // --------------------------------------------------
+    // FRESH QUOTE CHECK
+    //
+    // IMPORTANT:
+    // Do NOT rely only on the quoteIsStale value from
+    // the React render.
+    //
+    // Recalculate the quote age at the exact moment
+    // the user starts execution.
+    // --------------------------------------------------
+
+    // --------------------------------------------------
+    // Re-check quote freshness immediately before execution
+    // --------------------------------------------------
+
+    const currentQuoteIsStale =
+      isOpportunityQuoteStale(
+        opportunity.quoteTimestamp,
+      )
+
+
+
+    // --------------------------------------------------
+    // HARD SAFETY GATE
+    // --------------------------------------------------
+
+    if (currentQuoteIsStale) {
+
+      setExecutionState(
+        'FAILED',
+      )
+
+      setExecutionError(
+        'Opportunity quote is stale. Scan again before execution.',
+      )
+
+
+      return
+    }
+
+    try {
+
+      // ------------------------------------------------
+      // Waiting for Wallet
+      // ------------------------------------------------
+
+      setExecutionState(
+        'WAITING_FOR_WALLET',
+      )
 
       setExecutionError(null)
+      setTransactionHash(null)
 
-      // --------------------------------------------------
-      // Wallet / Executor Access Check
+      // ------------------------------------------------
+      // Resolve Token Addresses
       //
-      // Refresh these values immediately before execution.
-      // This prevents an account or network change after
-      // the page was loaded from using stale access state.
-      // --------------------------------------------------
+      // opportunity.tokenIn / tokenOut may contain:
+      //
+      // USDC
+      // WETH
+      //
+      // or actual Ethereum addresses.
+      // ------------------------------------------------
+
+      const tokenInAddress =
+        resolveTokenAddress(
+          opportunity.tokenIn,
+        )
+
+      const tokenOutAddress =
+        resolveTokenAddress(
+          opportunity.tokenOut,
+        )
+
+      // ------------------------------------------------
+      // Token Validation
+      // ------------------------------------------------
+
+      if (
+        !isAddress(
+          tokenInAddress,
+        )
+      ) {
+        throw new Error(
+          'Token In is not a valid Ethereum address.',
+        )
+      }
+
+      if (
+        !isAddress(
+          tokenOutAddress,
+        )
+      ) {
+        throw new Error(
+          'Token Out is not a valid Ethereum address.',
+        )
+      }
+
+      if (
+        tokenInAddress.toLowerCase() ===
+        tokenOutAddress.toLowerCase()
+      ) {
+        throw new Error(
+          'Token In and Token Out must be different.',
+        )
+      }
+
+      // ------------------------------------------------
+      // Token Decimals
+      // ------------------------------------------------
+
+      const tokenInDecimals =
+        getTokenDecimals(
+          tokenInAddress,
+        )
+
+      // ------------------------------------------------
+      // Flash Loan Amount
+      // ------------------------------------------------
+
+      const amount =
+        toTokenUnits(
+          opportunity.loanAmount,
+          tokenInDecimals,
+        )
+
+      if (amount <= 0n) {
+        throw new Error(
+          'Flash loan amount must be greater than zero.',
+        )
+      }
+
+      // ------------------------------------------------
+      // Build Flash Loan Parameters
+      // ------------------------------------------------
+
+      const params =
+        buildDexArbitrageParams(
+          firstDex,
+          tokenInAddress,
+          tokenOutAddress,
+          opportunity.uniFee,
+          opportunity.minOut1,
+          opportunity.minOut2,
+          opportunity.minProfit,
+        )
+
+      // ------------------------------------------------
+      // Pre-flight Simulation
+      // ------------------------------------------------
 
       try {
 
-        const [
-          currentWallet,
-          currentOwner,
-          currentPaused,
-        ] = await Promise.all([
-          getConnectedWalletAddress(),
-          getExecutorOwner(),
-          getExecutorPaused(),
-        ])
-
-        setWalletAddress(currentWallet)
-        setIsOwner(
-          currentWallet !== null &&
-          currentWallet.toLowerCase() ===
-            currentOwner.toLowerCase(),
-        )
-        setIsPaused(currentPaused)
-
-        if (!currentWallet) {
-          setExecutionError(
-            'Connect the Executor owner wallet before execution.',
-          )
-
-          return
-        }
-
-        if (
-          currentWallet.toLowerCase() !==
-          currentOwner.toLowerCase()
-        ) {
-          setExecutionError(
-            'Connected wallet is not the Executor owner.',
-          )
-
-          return
-        }
-
-        if (currentPaused) {
-          setExecutionError(
-            'Executor contract is currently paused.',
-          )
-
-          return
-        }
-
-      } catch (accessError) {
-
-        console.error(
-          'Failed to refresh executor access:',
-          accessError,
-        )
-
-        setExecutionError(
-          accessError instanceof Error
-            ? `Executor access check failed: ${accessError.message}`
-            : 'Executor access check failed.',
-        )
-
-        return
-      }
-
-      // --------------------------------------------------
-      // Opportunity Checks
-      // --------------------------------------------------
-
-      if (!opportunity.isProfitable) {
-        setExecutionError(
-          'Opportunity is not profitable.',
-        )
-
-        return
-      }
-
-      if (opportunity.isStale) {
-        setExecutionError(
-          'Opportunity quote is stale. Scan again before execution.',
-        )
-
-        return
-      }
-
-      try {
-
         // ------------------------------------------------
-        // Waiting for Wallet
-        // ------------------------------------------------
-
-        setExecutionState(
-          'WAITING_FOR_WALLET',
-        )
-
-        setExecutionError(null)
-        setTransactionHash(null)
-
-        // ------------------------------------------------
-        // Resolve Token Addresses
+        // Run pre-flight simulation
         //
-        // opportunity.tokenIn / tokenOut may contain:
+        // simulateFlashLoanArbitrage() returns:
         //
-        // USDC
-        // WETH
+        // true  = contract simulation succeeded
+        // false = contract simulation reverted
         //
-        // or actual Ethereum addresses.
+        // IMPORTANT:
+        // Never continue to a real transaction when
+        // simulation returns false.
         // ------------------------------------------------
 
-        const tokenInAddress =
-          resolveTokenAddress(
-            opportunity.tokenIn,
-          )
-
-        const tokenOutAddress =
-          resolveTokenAddress(
-            opportunity.tokenOut,
-          )
-
-        // ------------------------------------------------
-        // Token Validation
-        // ------------------------------------------------
-
-        if (
-          !isAddress(
-            tokenInAddress,
-          )
-        ) {
-          throw new Error(
-            'Token In is not a valid Ethereum address.',
-          )
-        }
-
-        if (
-          !isAddress(
-            tokenOutAddress,
-          )
-        ) {
-          throw new Error(
-            'Token Out is not a valid Ethereum address.',
-          )
-        }
-
-        if (
-          tokenInAddress.toLowerCase() ===
-          tokenOutAddress.toLowerCase()
-        ) {
-          throw new Error(
-            'Token In and Token Out must be different.',
-          )
-        }
-
-        // ------------------------------------------------
-        // Token Decimals
-        // ------------------------------------------------
-
-        const tokenInDecimals =
-          getTokenDecimals(
-            tokenInAddress,
-          )
-
-        // ------------------------------------------------
-        // Flash Loan Amount
-        // ------------------------------------------------
-
-        const amount =
-          toTokenUnits(
-            opportunity.loanAmount,
-            tokenInDecimals,
-          )
-
-        if (amount <= 0n) {
-          throw new Error(
-            'Flash loan amount must be greater than zero.',
-          )
-        }
-
-        // ------------------------------------------------
-        // Build Flash Loan Parameters
-        // ------------------------------------------------
-
-        const params =
-          buildDexArbitrageParams(
-            firstDex,
-            tokenInAddress,
-            tokenOutAddress,
-            opportunity.uniFee,
-            opportunity.minOut1,
-            opportunity.minOut2,
-            opportunity.minProfit,
-          )
-
-        // ------------------------------------------------
-        // Encoded Parameter Diagnostics
-        // ------------------------------------------------
-
-        // ------------------------------------------------
-        // Pre-flight simulation
-        // ------------------------------------------------
-
-        
-
-        
-
-        
-
-        
-        
-               try {
-
-          // ------------------------------------------------
-          // Run pre-flight simulation
-          //
-          // simulateFlashLoanArbitrage() returns:
-          //
-          // true  = contract simulation succeeded
-          // false = contract simulation reverted
-          //
-          // IMPORTANT:
-          // Never continue to a real transaction when
-          // simulation returns false.
-          // ------------------------------------------------
-
-          const simulationResult =
-            await simulateFlashLoanArbitrage(
-              tokenInAddress,
-              amount,
-              params,
-            )
-
-          
-          // ------------------------------------------------
-          // HARD SAFETY GATE
-          // ------------------------------------------------
-
-          if (!simulationResult) {
-
-            console.error(
-              'Flash loan simulation failed:',
-            )
-
-            console.error(
-              'Real transaction blocked by simulation.',
-            )
-
-            setExecutionState(
-              'FAILED',
-            )
-
-            setExecutionError(
-              'Flash loan simulation failed. The transaction was blocked before MetaMask execution.',
-            )
-
-            return
-          }
-
-          // ------------------------------------------------
-          // Simulation passed
-          // ------------------------------------------------
-
-        } catch (simulationError) {
-
-          console.error(
-            'Flash loan simulation failed:',
-            simulationError,
-          )
-
-
-
-          setExecutionState(
-            'FAILED',
-          )
-
-          setExecutionError(
-            simulationError instanceof Error
-              ? `Simulation failed: ${simulationError.message}`
-              : 'Flash loan simulation failed.',
-          )
-
-          return
-        }
-
-        // ------------------------------------------------
-        // Transaction Pending
-        //
-        // The actual blockchain confirmation is handled
-        // by TransactionStatus.tsx.
-        // ------------------------------------------------
-
-        setExecutionState(
-          'TRANSACTION_PENDING',
-        )
-
-        // ------------------------------------------------
-        // Execute Flash Loan Arbitrage
-        // ------------------------------------------------
-
-        const hash =
-          await executeFlashLoanArbitrage(
+        const simulationResult =
+          await simulateFlashLoanArbitrage(
             tokenInAddress,
             amount,
             params,
           )
 
         // ------------------------------------------------
-        // Validate Transaction Hash
+        // HARD SAFETY GATE
         // ------------------------------------------------
 
-        if (!hash) {
-          throw new Error(
-            'Transaction was submitted but no transaction hash was returned.',
+        if (!simulationResult) {
+
+          console.error(
+            'Flash loan simulation failed:',
           )
+
+          console.error(
+            'Real transaction blocked by simulation.',
+          )
+
+          setExecutionState(
+            'FAILED',
+          )
+
+          setExecutionError(
+            'Flash loan simulation failed. The transaction was blocked before MetaMask execution.',
+          )
+
+          return
         }
 
         // ------------------------------------------------
-        // Save Transaction Hash
-        //
-        // TransactionStatus will now wait for the
-        // blockchain confirmation.
+        // Simulation Passed
         // ------------------------------------------------
 
-        setTransactionHash(
-          hash,
-        )
-
-        
-        // ------------------------------------------------
-        // Close Confirmation Dialog
-        // ------------------------------------------------
-
-        setShowConfirmation(
-          false,
-        )
-
-      } catch (error) {
+      } catch (simulationError) {
 
         console.error(
-          'Flash loan arbitrage execution failed:',
-          error,
+          'Flash loan simulation failed:',
+          simulationError,
         )
 
         setExecutionState(
@@ -1097,12 +1164,120 @@ function ExecutionPage() {
         )
 
         setExecutionError(
-          error instanceof Error
-            ? error.message
-            : 'Flash loan arbitrage execution failed.',
+          simulationError instanceof Error
+            ? `Simulation failed: ${simulationError.message}`
+            : 'Flash loan simulation failed.',
+        )
+
+        return
+      }
+
+      // ------------------------------------------------
+      // FINAL QUOTE SAFETY CHECK
+      //
+      // The simulation itself takes time.
+      //
+      // Therefore the quote may become stale AFTER
+      // simulation succeeds.
+      //
+      // Never submit the real transaction unless the
+      // quote is still within the 30-second window.
+      // ------------------------------------------------
+
+      const finalQuoteIsStale =
+        isOpportunityQuoteStale(
+          opportunity.quoteTimestamp,
+        )
+
+      if (finalQuoteIsStale) {
+
+        setExecutionState(
+          'FAILED',
+        )
+
+        setExecutionError(
+          'Opportunity quote became stale during simulation. Transaction was blocked. Scan again before execution.',
+        )
+
+        return
+      }
+
+      // ------------------------------------------------
+      // Transaction Pending
+      //
+      // Only reach this point when:
+      //
+      // 1. Wallet is valid
+      // 2. Executor owner is valid
+      // 3. Contract is active
+      // 4. Opportunity is profitable
+      // 5. Initial quote is fresh
+      // 6. Simulation succeeded
+      // 7. Final quote is still fresh
+      // ------------------------------------------------
+
+      setExecutionState(
+        'TRANSACTION_PENDING',
+      )
+
+      // ------------------------------------------------
+      // Execute Flash Loan Arbitrage
+      // ------------------------------------------------
+
+      const hash =
+        await executeFlashLoanArbitrage(
+          tokenInAddress,
+          amount,
+          params,
+        )
+
+      // ------------------------------------------------
+      // Validate Transaction Hash
+      // ------------------------------------------------
+
+      if (!hash) {
+        throw new Error(
+          'Transaction was submitted but no transaction hash was returned.',
         )
       }
+
+      // ------------------------------------------------
+      // Save Transaction Hash
+      //
+      // TransactionStatus will now wait for the
+      // blockchain confirmation.
+      // ------------------------------------------------
+
+      setTransactionHash(
+        hash,
+      )
+
+      // ------------------------------------------------
+      // Close Confirmation Dialog
+      // ------------------------------------------------
+
+      setShowConfirmation(
+        false,
+      )
+
+    } catch (error) {
+
+      console.error(
+        'Flash loan arbitrage execution failed:',
+        error,
+      )
+
+      setExecutionState(
+        'FAILED',
+      )
+
+      setExecutionError(
+        error instanceof Error
+          ? error.message
+          : 'Flash loan arbitrage execution failed.',
+      )
     }
+  }
 
 
         // ====================================================
@@ -1604,7 +1779,7 @@ function ExecutionPage() {
     !isOwner ||
     isPaused ||
     !opportunity.isProfitable ||
-    opportunity.isStale
+    quoteIsStale
 
 
   // ====================================================
@@ -1823,12 +1998,12 @@ function ExecutionPage() {
           <ExecutionRow
             label="Quote Status"
             value={
-              opportunity.isStale
+              quoteIsStale
                 ? 'STALE'
                 : 'CURRENT'
             }
             valueClassName={
-              opportunity.isStale
+              quoteIsStale
                 ? 'text-red-400'
                 : 'text-emerald-400'
             }
@@ -1916,7 +2091,7 @@ function ExecutionPage() {
 
           <CheckItem
             label="Quote is current"
-            passed={!opportunity.isStale}
+            passed={!quoteIsStale}
           />
 
 
@@ -1937,22 +2112,30 @@ function ExecutionPage() {
 
 
       {/* ==================================================
-          Execution Error
+          Quote Stale Warning / Execution Error
           ================================================== */}
 
-      {executionError && (
+      {quoteIsStale && (
+        <section className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+          <p className="text-sm font-semibold text-red-400">
+            Opportunity Quote Is Stale
+          </p>
 
+          <p className="mt-2 text-sm text-slate-300">
+            Opportunity quote is stale. Scan again before execution.
+          </p>
+        </section>
+      )}
+
+      {executionError && !quoteIsStale && (
         <section className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
-
           <p className="text-sm font-semibold text-red-400">
             Execution Error
           </p>
 
-
           <p className="mt-2 break-words text-sm text-slate-300">
             {executionError}
           </p>
-
         </section>
       )}
 
@@ -2420,12 +2603,20 @@ function ExecutionPage() {
   </button>
 
 
-  <button
+ <button
     type="button"
-    disabled={executionDisabled}
-    onClick={() =>
-      setShowConfirmation(true)
+    disabled={
+      quoteIsStale
+        ? false
+        : executionDisabled
     }
+    onClick={() => {
+      if (quoteIsStale) {
+        navigate('/scanner')
+        return
+      }
+      setShowConfirmation(true)
+    }}
     className="rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
   >
     {executionState ===
@@ -2440,7 +2631,9 @@ function ExecutionPage() {
           : executionState ===
               'FAILED'
             ? 'Retry Execution'
-            : 'Confirm & Execute'}
+            : quoteIsStale
+              ? 'Quote Stale — Scan Again'
+              : 'Confirm & Execute'}
   </button>
 
 </div>

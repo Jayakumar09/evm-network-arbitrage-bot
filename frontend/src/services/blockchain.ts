@@ -25,14 +25,11 @@ import {
 
 import { ERC20_ABI } from '../abi/erc20'
 
-const BLOCKCHAIN_DEBUG = false
+const BLOCKCHAIN_DEBUG = false;
 
-function blockchainLog(
-  ...args: unknown[]
-) {
-  if (BLOCKCHAIN_DEBUG) {
-    console.log(...args)
-  }
+export function blockchainLog(...args: any[]) {
+    if (!BLOCKCHAIN_DEBUG) return;
+    console.log(...args);
 }
 
 // ======================================================
@@ -51,6 +48,22 @@ const EXECUTOR_READ_ABI = [
   'function owner() view returns (address)',
   'function paused() view returns (bool)',
   'function getTokenBalance(address tokenAddress) view returns (uint256)',
+]
+
+// ======================================================
+// Aave V3 Pool Read-Only ABI
+// Ethereum Sepolia
+// ======================================================
+//
+// FLASHLOAN_PREMIUM_TOTAL returns the current Aave
+// flash-loan premium in basis points.
+//
+// Example:
+// 5 = 5 bps = 0.05%
+//
+
+const AAVE_POOL_READ_ABI = [
+  'function FLASHLOAN_PREMIUM_TOTAL() view returns (uint128)',
 ]
 
 // ======================================================
@@ -107,6 +120,13 @@ const UNISWAP_V3_QUOTER_V2_ABI = [
   'function quoteExactInputSingle((address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96)) returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)',
 ]
 
+// ======================================================
+// Aave V3 Sepolia Pool
+// ======================================================
+
+const AAVE_POOL_ADDRESS =
+  '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951'
+
 // V2-compatible router quote ABI.
 const V2_ROUTER_READ_ABI = [
   'function getAmountsOut(uint256 amountIn, address[] memory path) view returns (uint256[] memory amounts)',
@@ -116,6 +136,7 @@ const V2_ROUTER_DIAGNOSTIC_ABI = [
   'function factory() view returns (address)',
   'function WETH() view returns (address)',
 ]
+
 
 
 
@@ -2343,6 +2364,117 @@ export async function getProvider(): Promise<BrowserProvider> {
 }
 
 // ======================================================
+// Get Live Aave Flash Loan Premium
+// Ethereum Sepolia
+// ======================================================
+//
+// Reads the CURRENT flash-loan premium directly from
+// the deployed Aave V3 Pool.
+//
+// FLASHLOAN_PREMIUM_TOTAL is returned in basis points.
+//
+// Example:
+//
+//     5 bps
+//     5 / 10,000
+//     = 0.0005
+//     = 0.05%
+//
+// This is a READ-ONLY RPC call.
+// No MetaMask transaction is created.
+// No gas is consumed.
+//
+// ======================================================
+
+export async function getAaveFlashLoanPremiumBps(): Promise<number> {
+
+  const provider =
+    await getProvider()
+
+  const pool =
+    new Contract(
+      AAVE_POOL_ADDRESS,
+      AAVE_POOL_READ_ABI,
+      provider,
+    )
+
+  try {
+
+    const premiumRaw =
+      await pool.FLASHLOAN_PREMIUM_TOTAL()
+
+    const premiumBps =
+      Number(
+        premiumRaw,
+      )
+
+    if (
+      !Number.isFinite(
+        premiumBps,
+      ) ||
+      premiumBps < 0
+    ) {
+
+      throw new Error(
+        'Invalid Aave flash-loan premium returned by Sepolia Pool.',
+      )
+    }
+
+    blockchainLog(
+      '[AAVE PREMIUM] Pool:',
+      AAVE_POOL_ADDRESS,
+    )
+
+    blockchainLog(
+      '[AAVE PREMIUM] Current premium:',
+      premiumBps,
+      'bps',
+    )
+
+    blockchainLog(
+      '[AAVE PREMIUM] Current percentage:',
+      premiumBps / 100,
+      '%',
+    )
+
+    return premiumBps
+
+  } catch (error: any) {
+
+    console.error(
+      '[AAVE PREMIUM] Failed to read FLASHLOAN_PREMIUM_TOTAL',
+    )
+
+    console.error(
+      '[AAVE PREMIUM] Pool:',
+      AAVE_POOL_ADDRESS,
+    )
+
+    console.error(
+      '[AAVE PREMIUM] Error:',
+      error,
+    )
+
+    console.error(
+      '[AAVE PREMIUM] Message:',
+      error?.message,
+    )
+
+    console.error(
+      '[AAVE PREMIUM] Reason:',
+      error?.reason,
+    )
+
+    console.error(
+      '[AAVE PREMIUM] Short message:',
+      error?.shortMessage,
+    )
+
+    throw error
+  }
+}
+
+// ======================================================
 // Get Connected Wallet Address
 // ======================================================
 
@@ -2790,6 +2922,9 @@ if (import.meta.env.DEV) {
   //====================================================
   // Flash loan params decoder diagnostic
   //====================================================
+
+  ;(window as any).getAaveFlashLoanPremiumBps =
+  getAaveFlashLoanPremiumBps
 
   //====================================================
   // Decode Executor custom error
