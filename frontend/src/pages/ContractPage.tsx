@@ -1438,7 +1438,7 @@ function ContractPage() {
             </span>
 
             <span className="text-sm font-semibold text-amber-400">
-              MOCK
+              ON-CHAIN
             </span>
 
           </div>
