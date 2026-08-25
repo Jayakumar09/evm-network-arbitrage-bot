@@ -2111,10 +2111,10 @@ function TransactionsPage() {
         </div>
 
 
-        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
-            Total Net Profit
+            Calculated Net Profit
           </p>
 
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
@@ -2122,7 +2122,18 @@ function TransactionsPage() {
           </p>
 
           <p className="mt-1 text-xs text-slate-500">
-            Historical arbitrage profit
+            {arbitrageTransactions.filter(
+              (transaction: TransactionItem) =>
+                transaction.type === 'ARBITRAGE' &&
+                typeof transaction.netProfit === 'string' &&
+                transaction.netProfit.startsWith('$') &&
+                Number.isFinite(
+                  Number(
+                    transaction.netProfit.slice(1),
+                  ),
+                ),
+            ).length}{' '}
+            of {totalTransactions} arbitrages have historical USD valuation
           </p>
 
         </div>

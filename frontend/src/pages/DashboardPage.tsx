@@ -328,12 +328,12 @@ function DashboardPage() {
         </div>
 
 
-        {/* Net Profit */}
+        {/* Calculated Net Profit */}
 
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
 
           <p className="text-xs uppercase tracking-wider text-slate-500">
-            Total Net Profit
+            Calculated Net Profit
           </p>
 
           <p className="mt-3 text-3xl font-bold text-emerald-400">
@@ -341,6 +341,22 @@ function DashboardPage() {
               ? '—'
               : `$${totalNetProfit.toFixed(2)}`}
           </p>
+
+          {!loading && (
+            <p className="mt-2 text-xs text-slate-500">
+              {arbitrageTransactions.filter(
+                (transaction) =>
+                  typeof transaction.netProfit === 'string' &&
+                  transaction.netProfit.startsWith('$') &&
+                  Number.isFinite(
+                    Number(
+                      transaction.netProfit.slice(1),
+                    ),
+                  ),
+              ).length}{' '}
+              of {totalTransactions} arbitrages have historical USD valuation
+            </p>
+          )}
 
         </div>
 
