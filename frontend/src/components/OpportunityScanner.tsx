@@ -155,7 +155,7 @@ async function getEthUsdPrice(): Promise<number> {
 
   } catch (error) {
 
-    console.warn(
+    scannerWarn(
       '[LIVE SCANNER] ETH/USD lookup failed:',
       error,
     )
@@ -291,6 +291,21 @@ function OpportunityScanner({
       return
     }
 
+    // USDC has 6 decimals.
+    // Reject values that cannot be represented safely on-chain.
+    try {
+      parseUnits(
+        loanAmount,
+        6,
+      )
+    } catch {
+      setScanError(
+        'Enter a valid USDC amount with up to 6 decimal places.',
+      )
+
+      return
+    }
+
 
     setIsScanning(true)
     setScanError(null)
@@ -315,7 +330,7 @@ function OpportunityScanner({
       const flashLoanPremiumBps =
         await getAaveFlashLoanPremiumBps()
 
-      console.log(
+      scannerLog(
         '[LIVE SCANNER] Aave flash-loan premium:',
         flashLoanPremiumBps,
         'bps',
@@ -682,7 +697,25 @@ function OpportunityScanner({
         // by gas estimation, simulation and execution.
         // ==================================================
 
-        const finalParams =
+        const preGasProfit =
+          grossProfit -
+          flashLoanFee -
+          dexFees -
+          slippageCost -
+          safetyBuffer
+
+        // --------------------------------------------------
+        // Parameters used only for gas estimation.
+        //
+        // minProfit is intentionally 0 here. The purpose of
+        // estimateGas() is to measure the Executor gas cost,
+        // not to enforce the final profitability floor.
+        //
+        // The real execution parameters are rebuilt later by
+        // ExecutionPage using the published minProfit value.
+        // --------------------------------------------------
+
+        const estimationParams =
           encodeFlashLoanArbitrageParams(
             1,
             firstDexNumber,
@@ -693,18 +726,8 @@ function OpportunityScanner({
             ),
             minOut1Raw,
             minOut2Raw,
-            parseUnits(
-              minProfit.toFixed(6),
-              6,
-            ),
+            0n,
           )
-
-        const preGasProfit =
-          grossProfit -
-          flashLoanFee -
-          dexFees -
-          slippageCost -
-          safetyBuffer
 
         if (
           preGasProfit <= 0
@@ -766,7 +789,7 @@ function OpportunityScanner({
               await estimateFlashLoanArbitrage(
                 USDC_ADDRESS,
                 amountIn,
-                finalParams,
+                estimationParams,
               )
 
             // ------------------------------------------------
@@ -778,6 +801,13 @@ function OpportunityScanner({
 
             // ------------------------------------------------
             // Current Sepolia gas price
+            //
+            // Use eth_gasPrice directly.
+            //
+            // Do NOT use provider.getFeeData() here because
+            // ethers may request eth_maxPriorityFeePerGas,
+            // which is unavailable through the current
+            // MetaMask/Sepolia RPC path.
             // ------------------------------------------------
 
             const gasPriceHex =
@@ -1374,7 +1404,7 @@ function OpportunityScanner({
         bestOpportunity.quoteTimestamp
 
 
-      console.log(
+      scannerLog(
         '[LIVE SCANNER] Quote assembly delay:',
         `${(publishDelayMs / 1000).toFixed(1)}s`,
         '— freshness clock starts at publish time.',
@@ -1411,40 +1441,40 @@ function OpportunityScanner({
       error: any
     ) {
 
-      console.error(
+      scannerWarn(
         '========================================',
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] FAILED',
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] Error:',
         error,
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] Message:',
         error?.message,
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] Reason:',
         error?.reason,
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] Short message:',
         error?.shortMessage,
       )
 
-      console.error(
+      scannerWarn(
         '[LIVE SCANNER] Data:',
         error?.data,
       )
 
-      console.error(
+      scannerWarn(
         '========================================',
       )
 

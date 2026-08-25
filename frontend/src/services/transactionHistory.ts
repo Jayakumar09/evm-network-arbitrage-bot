@@ -3011,22 +3011,118 @@ export function saveTransaction(
     // Prevent duplicate transaction hashes
     // --------------------------------------------------
 
-    const alreadyExists =
-      existingTransactions.some(
+    const transactionHash =
+      transaction.hash.toLowerCase()
+
+
+    const existingIndex =
+      existingTransactions.findIndex(
         (
           item,
         ) =>
           item.hash.toLowerCase() ===
-          transaction.hash.toLowerCase(),
+          transactionHash,
       )
 
 
+    // --------------------------------------------------
+    // If this hash already exists, do NOT blindly ignore
+    // the new result.
+    //
+    // A transaction can first be stored as PENDING and
+    // later arrive here as SUCCESS. The old behaviour
+    // discarded that authoritative SUCCESS update because
+    // the hash already existed.
+    //
+    // Prefer the incoming record when it is more complete:
+    // - SUCCESS replaces PENDING / FAILED
+    // - reconciled replaces non-reconciled
+    // - otherwise keep the existing record unchanged
+    // --------------------------------------------------
+
     if (
-      alreadyExists
+      existingIndex >=
+      0
     ) {
 
+      const existingTransaction =
+        existingTransactions[
+          existingIndex
+        ]
+
+
+      const incomingIsMoreAuthoritative =
+        (
+          transaction.status ===
+          'SUCCESS' &&
+          existingTransaction.status !==
+          'SUCCESS'
+        ) ||
+        (
+          transaction.reconciled ===
+          true &&
+          existingTransaction.reconciled !==
+          true
+        )
+
+
+      if (
+        incomingIsMoreAuthoritative
+      ) {
+
+        const updatedTransactions =
+          [
+            ...existingTransactions,
+          ]
+
+
+        updatedTransactions[
+          existingIndex
+        ] = {
+          ...existingTransaction,
+          ...transaction,
+        }
+
+
+        writeTransactionsToKey(
+          walletKey,
+          updatedTransactions,
+        )
+
+
+        window.dispatchEvent(
+          new CustomEvent(
+            TRANSACTION_HISTORY_EVENT,
+          ),
+        )
+
+
+        console.log(
+          '[TRANSACTION DEBUG] Existing transaction updated with authoritative result:',
+          transaction.hash,
+        )
+
+        console.log(
+          '[TRANSACTION DEBUG] Previous status:',
+          existingTransaction.status,
+        )
+
+        console.log(
+          '[TRANSACTION DEBUG] New status:',
+          transaction.status,
+        )
+
+        console.log(
+          '[TRANSACTION DEBUG] New net profit:',
+          transaction.netProfit,
+        )
+
+        return
+      }
+
+
       console.log(
-        '[TRANSACTION DEBUG] Transaction already exists:',
+        '[TRANSACTION DEBUG] Transaction already exists — no authoritative update required:',
         transaction.hash,
       )
 

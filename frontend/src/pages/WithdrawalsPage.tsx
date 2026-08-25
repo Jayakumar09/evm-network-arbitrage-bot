@@ -531,6 +531,31 @@ function WithdrawalsPage() {
         )
 
 
+      // ------------------------------------------------
+      // Save successful ERC20 withdrawal
+      //
+      // Withdrawals are management transactions only.
+      // They must never contribute to arbitrage profit.
+      // ------------------------------------------------
+
+      saveTransaction({
+        hash: transactionHash,
+        status: 'SUCCESS',
+        type: 'TOKEN_WITHDRAWAL',
+        pair: `Executor ${token} → Owner`,
+        amount:
+          `${Number(amount).toFixed(
+            token === 'USDC'
+              ? 2
+              : 6,
+          )} ${token}`,
+        grossProfit: '—',
+        netProfit: '—',
+        gas: '—',
+        time: new Date().toLocaleString(),
+      })
+
+
       setActionMessage(
         `Executor ${token} withdrawn successfully. Transaction: ${transactionHash}`,
       )
@@ -608,6 +633,15 @@ function WithdrawalsPage() {
       const transactionHash =
         await withdrawExecutorWETHAsETH()
 
+
+      // ------------------------------------------------
+      // Do not create a second local record here.
+      //
+      // WETH → ETH conversion results in a native ETH
+      // transfer from the Executor to the owner. The
+      // Transactions page detects that confirmed on-chain
+      // ETH withdrawal by transaction hash.
+      // ------------------------------------------------
 
       setActionMessage(
         `WETH → ETH conversion completed successfully. Transaction: ${transactionHash}`,

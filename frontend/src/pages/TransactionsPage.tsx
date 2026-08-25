@@ -10,10 +10,8 @@ import {
 } from 'ethers'
 
 import {
-  auditReconciliationState,
   getStoredTransactions,
   migrateHistoricalAavePremium,
-  reconcileStoredTransactionsWithChain,
   subscribeToTransactionUpdates,
 } from '../services/transactionHistory'
 
@@ -402,6 +400,87 @@ function getTransactionListSignature(
   )
 }
 
+// ======================================================
+// Deduplicate Transactions By Hash
+//
+// Transaction hashes are the canonical identity.
+// This prevents the same transaction from being counted
+// more than once when it exists in multiple sources.
+// ======================================================
+
+function getUniqueTransactionsByHash(
+  transactions: TransactionItem[],
+): TransactionItem[] {
+
+  const uniqueTransactions =
+    new Map<string, TransactionItem>()
+
+
+  for (
+    const transaction of transactions
+  ) {
+
+    const hash =
+      transaction.hash?.toLowerCase()
+
+
+    if (
+      !hash ||
+      uniqueTransactions.has(hash)
+    ) {
+      continue
+    }
+
+
+    uniqueTransactions.set(
+      hash,
+      transaction,
+    )
+  }
+
+
+  return Array.from(
+    uniqueTransactions.values(),
+  )
+}
+
+
+// ======================================================
+// Parse Amount From Transaction String
+//
+// Example:
+//     "4276.69 USDC" -> 4276.69
+// ======================================================
+
+function parseTransactionAmount(
+  amount: string,
+  symbol: string,
+): number {
+
+  const match =
+    amount.match(
+      new RegExp(
+        `([0-9]+(?:\\.[0-9]+)?)\\s*${symbol}\\b`,
+        'i',
+      ),
+    )
+
+
+  if (!match) {
+    return 0
+  }
+
+
+  const value =
+    Number(match[1])
+
+
+  return Number.isFinite(value)
+    ? value
+    : 0
+}
+
+
 
 // ======================================================
 // Format ERC20 Amount
@@ -642,7 +721,7 @@ async function getExecutorTransactions():
     !ownerWallet
   ) {
 
-    
+
 
     return []
   }
@@ -899,7 +978,7 @@ async function getExecutorTransactions():
   )
 
 
-  
+
 
 
   return withdrawals
@@ -919,46 +998,11 @@ function mergeExecutorWithdrawals(
     getStoredExecutorWithdrawals()
 
 
-  const allWithdrawals =
-    [
+  const merged =
+    getUniqueTransactionsByHash([
       ...blockchainWithdrawals,
       ...storedWithdrawals,
-    ]
-
-
-  const uniqueTransactions =
-    new Map<
-      string,
-      TransactionItem
-    >()
-
-
-  for (
-    const transaction of allWithdrawals
-  ) {
-
-    const key =
-      transaction.hash.toLowerCase()
-
-
-    if (
-      !uniqueTransactions.has(
-        key,
-      )
-    ) {
-
-      uniqueTransactions.set(
-        key,
-        transaction,
-      )
-    }
-  }
-
-
-  const merged =
-    Array.from(
-      uniqueTransactions.values(),
-    )
+    ])
 
 
   merged.sort(
@@ -1196,7 +1240,7 @@ function TransactionsPage() {
         }
 
 
-        
+
 
 
         arbitrageTransactionsRef.current =
@@ -1247,7 +1291,7 @@ function TransactionsPage() {
           newSignature
         ) {
 
-          
+
 
 
           executorWithdrawalsRef.current =
@@ -1406,19 +1450,6 @@ function TransactionsPage() {
 
     void (async () => {
 
-      // ----------------------------------------------
-      // Chain reconciliation FIRST so every later
-      // consumer (premium migration, page totals) sees
-      // authoritative on-chain values.
-      // ----------------------------------------------
-
-      await reconcileStoredTransactionsWithChain()
-
-      // TEMPORARY READ-ONLY DIAGNOSTIC — remove after
-      // the reconciliation strategy is approved.
-
-      await auditReconciliationState()
-
       await migrateHistoricalAavePremium()
 
       await refreshTransactions()
@@ -1439,7 +1470,7 @@ function TransactionsPage() {
           }
 
 
-          
+
 
 
           void refreshStoredTransactions()
@@ -1471,7 +1502,7 @@ function TransactionsPage() {
         }
 
 
-        
+
 
 
         refreshTransactions()
@@ -1496,7 +1527,7 @@ function TransactionsPage() {
           'visible'
         ) {
 
-          
+
 
 
           refreshTransactions()
@@ -1544,13 +1575,13 @@ function TransactionsPage() {
         accounts: string[],
       ) => {
 
-        
 
-        
 
-        
 
-        
+
+
+
+
 
 
         // ------------------------------------------------
@@ -1562,7 +1593,7 @@ function TransactionsPage() {
           0
         ) {
 
-          
+
 
 
           if (mounted) {
@@ -1592,16 +1623,16 @@ function TransactionsPage() {
             }
 
 
-            
+
 
 
             const walletTransactions =
               await getStoredTransactions()
 
 
-            
 
-            
+
+
 
 
             // ------------------------------------------------
@@ -1633,31 +1664,38 @@ function TransactionsPage() {
     // MetaMask Network Changed
     // ==================================================
 
-    const handleChainChanged = () => {
+    const handleChainChanged =
+      (
+        _chainId: string,
+      ) => {
 
-      window.setTimeout(
-        async () => {
+        window.setTimeout(
+          async () => {
 
-          if (!mounted) {
-            return
-          }
+            if (!mounted) {
+              return
+            }
 
-          const walletTransactions =
-            await getStoredTransactions()
 
-          arbitrageTransactionsRef.current =
-            walletTransactions
+            const walletTransactions =
+              await getStoredTransactions()
 
-          setArbitrageTransactions(
-            walletTransactions,
-          )
 
-          void refreshTransactions()
+            arbitrageTransactionsRef.current =
+              walletTransactions
 
-        },
-        100,
-      )
-    }
+
+            setArbitrageTransactions(
+              walletTransactions,
+            )
+
+
+            void refreshTransactions()
+
+          },
+          100,
+        )
+      }
 
 
     // ==================================================
@@ -1668,7 +1706,7 @@ function TransactionsPage() {
       ethereum
     ) {
 
-      
+
 
 
       ethereum.on(
@@ -1683,7 +1721,7 @@ function TransactionsPage() {
       )
 
 
-      
+
     }
 
 
@@ -1733,7 +1771,7 @@ function TransactionsPage() {
         )
 
 
-        
+
       }
     }
 
@@ -1745,57 +1783,18 @@ function TransactionsPage() {
 
 
   // ====================================================
-  // Combine Transactions
-  // ====================================================
-
-  const transactions =
-    [
-      ...arbitrageTransactions,
-      ...executorWithdrawals,
-    ]
-
-
-  // ====================================================
-  // Deduplicate By Transaction Hash
-  // ====================================================
-
-  const uniqueTransactions =
-    new Map<
-      string,
-      TransactionItem
-    >()
-
-
-  for (
-    const transaction of transactions
-  ) {
-
-    const key =
-      transaction.hash.toLowerCase()
-
-
-    if (
-      !uniqueTransactions.has(
-        key,
-      )
-    ) {
-
-      uniqueTransactions.set(
-        key,
-        transaction,
-      )
-    }
-  }
-
-
-  // ====================================================
-  // Final Transaction List
+  // Combine And Deduplicate Transactions
+  //
+  // One blockchain transaction = one history record.
+  // Withdrawals and arbitrage records are kept together
+  // for display, but statistics are calculated separately.
   // ====================================================
 
   const mergedTransactions =
-    Array.from(
-      uniqueTransactions.values(),
-    )
+    getUniqueTransactionsByHash([
+      ...arbitrageTransactions,
+      ...executorWithdrawals,
+    ])
 
 
   // ====================================================
@@ -1819,42 +1818,36 @@ function TransactionsPage() {
   // ====================================================
   // Summary
   //
-  // IMPORTANT:
-  // Arbitrage statistics and Executor withdrawals are
-  // counted separately.
+  // ARBITRAGE statistics are based only on unique
+  // ARBITRAGE transaction hashes.
   //
-  // Total Transactions:
-  //     ARBITRAGE executions only.
-  //
-  // Successful:
-  //     Successful ARBITRAGE executions only.
-  //
-  // Withdrawals:
-  //     Executor -> Owner withdrawal transactions.
-  //
-  // Total Net Profit:
-  //     ARBITRAGE profit only.
+  // Withdrawals are counted separately and never affect
+  // transaction count, successful count, or net profit.
   // ====================================================
 
-  const totalTransactions =
-    arbitrageTransactions.filter(
+  const uniqueArbitrageTransactions =
+    getUniqueTransactionsByHash(
+      arbitrageTransactions,
+    ).filter(
       (
         transaction: TransactionItem,
       ) =>
         transaction.type ===
         'ARBITRAGE',
-    ).length
+    )
+
+
+  const totalTransactions =
+    uniqueArbitrageTransactions.length
 
 
   const successfulTransactions =
-    arbitrageTransactions.filter(
+    uniqueArbitrageTransactions.filter(
       (
         transaction: TransactionItem,
       ) =>
-        transaction.type ===
-          'ARBITRAGE' &&
         transaction.status ===
-          'SUCCESS',
+        'SUCCESS',
     ).length
 
 
@@ -1865,128 +1858,12 @@ function TransactionsPage() {
   // ====================================================
   // Total Withdrawal Amounts
   //
-  // Count and amounts are kept separate from arbitrage
-  // profit. Withdrawal amounts come from the actual
-  // Executor -> Owner transaction records.
+  // These values come only from actual Executor ->
+  // Owner withdrawal records.
   // ====================================================
 
   const totalWithdrawnUSDC =
-    executorWithdrawals
-      .filter(
-        (
-          transaction: TransactionItem,
-        ) =>
-          transaction.type ===
-            'TOKEN_WITHDRAWAL' &&
-          transaction.amount
-            .toUpperCase()
-            .includes('USDC'),
-      )
-      .reduce(
-        (
-          total,
-          transaction: TransactionItem,
-        ) => {
-
-          const match =
-            transaction.amount.match(
-              /([0-9]+(?:\.[0-9]+)?)\s*USDC/i,
-            )
-
-          return (
-            total +
-            (
-              match
-                ? Number(match[1])
-                : 0
-            )
-          )
-        },
-        0,
-      )
-
-
-  const totalWithdrawnWETH =
-    executorWithdrawals
-      .filter(
-        (
-          transaction: TransactionItem,
-        ) =>
-          transaction.type ===
-            'TOKEN_WITHDRAWAL' &&
-          transaction.amount
-            .toUpperCase()
-            .includes('WETH'),
-      )
-      .reduce(
-        (
-          total,
-          transaction: TransactionItem,
-        ) => {
-
-          const match =
-            transaction.amount.match(
-              /([0-9]+(?:\.[0-9]+)?)\s*WETH/i,
-            )
-
-          return (
-            total +
-            (
-              match
-                ? Number(match[1])
-                : 0
-            )
-          )
-        },
-        0,
-      )
-
-
-  const totalWithdrawnETH =
-    executorWithdrawals
-      .filter(
-        (
-          transaction: TransactionItem,
-        ) =>
-          transaction.type ===
-            'ETH_WITHDRAWAL' &&
-          transaction.amount
-            .toUpperCase()
-            .includes('ETH'),
-      )
-      .reduce(
-        (
-          total,
-          transaction: TransactionItem,
-        ) => {
-
-          const match =
-            transaction.amount.match(
-              /([0-9]+(?:\.[0-9]+)?)\s*ETH/i,
-            )
-
-          return (
-            total +
-            (
-              match
-                ? Number(match[1])
-                : 0
-            )
-          )
-        },
-        0,
-      )
-
-
-  // ====================================================
-  // Total Net Profit
-  //
-  // Only ARBITRAGE transactions count.
-  // ETH withdrawals do not affect arbitrage profit.
-  // ====================================================
-
-  const totalNetProfit =
-    mergedTransactions.reduce(
+    executorWithdrawals.reduce(
       (
         total,
         transaction: TransactionItem,
@@ -1994,17 +1871,109 @@ function TransactionsPage() {
 
         if (
           transaction.type !==
-          'ARBITRAGE'
+            'TOKEN_WITHDRAWAL' ||
+          !transaction.amount
+            .toUpperCase()
+            .includes('USDC')
         ) {
 
           return total
         }
 
 
+        return (
+          total +
+          parseTransactionAmount(
+            transaction.amount,
+            'USDC',
+          )
+        )
+      },
+      0,
+    )
+
+
+  const totalWithdrawnWETH =
+    executorWithdrawals.reduce(
+      (
+        total,
+        transaction: TransactionItem,
+      ) => {
+
+        if (
+          transaction.type !==
+            'TOKEN_WITHDRAWAL' ||
+          !transaction.amount
+            .toUpperCase()
+            .includes('WETH')
+        ) {
+
+          return total
+        }
+
+
+        return (
+          total +
+          parseTransactionAmount(
+            transaction.amount,
+            'WETH',
+          )
+        )
+      },
+      0,
+    )
+
+
+  const totalWithdrawnETH =
+    executorWithdrawals.reduce(
+      (
+        total,
+        transaction: TransactionItem,
+      ) => {
+
+        if (
+          transaction.type !==
+            'ETH_WITHDRAWAL' ||
+          !transaction.amount
+            .toUpperCase()
+            .includes('ETH')
+        ) {
+
+          return total
+        }
+
+
+        return (
+          total +
+          parseTransactionAmount(
+            transaction.amount,
+            'ETH',
+          )
+        )
+      },
+      0,
+    )
+
+
+  // ====================================================
+  // Total Net Profit
+  //
+  // Only unique ARBITRAGE transactions count.
+  // Invalid / missing profit values are ignored.
+  // Withdrawals never affect this value.
+  // ====================================================
+
+  const totalNetProfit =
+    uniqueArbitrageTransactions.reduce(
+      (
+        total,
+        transaction: TransactionItem,
+      ) => {
+
         const value =
           Number(
             transaction.netProfit
-              .replace(
+              ?.replace(
                 '$',
                 '',
               ),
@@ -2012,7 +1981,7 @@ function TransactionsPage() {
 
 
         if (
-          Number.isNaN(
+          !Number.isFinite(
             value,
           )
         ) {
@@ -2022,7 +1991,6 @@ function TransactionsPage() {
 
 
         return total + value
-
       },
       0,
     )
@@ -2111,10 +2079,10 @@ function TransactionsPage() {
         </div>
 
 
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-5">
 
           <p className="text-xs uppercase tracking-wide text-slate-400">
-            Calculated Net Profit
+            Total Net Profit
           </p>
 
           <p className="mt-2 text-2xl font-semibold text-emerald-400">
@@ -2122,18 +2090,7 @@ function TransactionsPage() {
           </p>
 
           <p className="mt-1 text-xs text-slate-500">
-            {arbitrageTransactions.filter(
-              (transaction: TransactionItem) =>
-                transaction.type === 'ARBITRAGE' &&
-                typeof transaction.netProfit === 'string' &&
-                transaction.netProfit.startsWith('$') &&
-                Number.isFinite(
-                  Number(
-                    transaction.netProfit.slice(1),
-                  ),
-                ),
-            ).length}{' '}
-            of {totalTransactions} arbitrages have historical USD valuation
+            Historical arbitrage profit
           </p>
 
         </div>

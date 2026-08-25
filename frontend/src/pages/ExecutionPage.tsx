@@ -58,6 +58,97 @@ function isOpportunityQuoteStale(
 }
 
 
+// ======================================================
+// MetaMask User Rejection Detection
+// ======================================================
+//
+// MetaMask uses RPC error code 4001 when the user cancels
+// or rejects the transaction signature.
+//
+// ethers v6 can expose this as:
+// - code: ACTION_REJECTED
+// - reason: rejected
+// - info.error.code: 4001
+// - shortMessage: "user rejected action"
+//
+// A deliberate user cancellation is NOT a blockchain
+// execution failure and must not be shown as an error.
+// ======================================================
+
+function isUserRejectedTransaction(
+  error: unknown,
+): boolean {
+
+  if (
+    !error ||
+    typeof error !== 'object'
+  ) {
+    return false
+  }
+
+
+  const errorObject =
+    error as Record<string, unknown>
+
+
+  const code =
+    errorObject.code
+
+
+  const reason =
+    errorObject.reason
+
+
+  const shortMessage =
+    errorObject.shortMessage
+
+
+  const message =
+    errorObject.message
+
+
+  const info =
+    errorObject.info
+
+
+  const nestedInfo =
+    info &&
+    typeof info === 'object'
+      ? info as Record<string, unknown>
+      : null
+
+
+  const nestedError =
+    nestedInfo?.error &&
+    typeof nestedInfo.error === 'object'
+      ? nestedInfo.error as Record<string, unknown>
+      : null
+
+
+  const nestedCode =
+    nestedError?.code
+
+
+  return (
+    code === 'ACTION_REJECTED' ||
+    nestedCode === 4001 ||
+    reason === 'rejected' ||
+    (
+      typeof shortMessage === 'string' &&
+      shortMessage.toLowerCase().includes(
+        'user rejected',
+      )
+    ) ||
+    (
+      typeof message === 'string' &&
+      message.toLowerCase().includes(
+        'user rejected',
+      )
+    )
+  )
+}
+
+
 
  
 
@@ -1262,6 +1353,51 @@ function ExecutionPage() {
 
     } catch (error) {
 
+      // ----------------------------------------------------
+      // MetaMask user cancellation
+      //
+      // IMPORTANT:
+      // A user pressing Cancel / Reject in MetaMask is not
+      // a failed blockchain transaction. No transaction hash
+      // exists and no gas has been spent.
+      //
+      // Close the confirmation modal and return the page to
+      // its normal IDLE state without showing an error.
+      // ----------------------------------------------------
+
+      if (
+        isUserRejectedTransaction(
+          error,
+        )
+      ) {
+
+        setShowConfirmation(
+          false,
+        )
+
+        setExecutionState(
+          'IDLE',
+        )
+
+        setExecutionError(
+          null,
+        )
+
+        return
+      }
+
+
+      // ----------------------------------------------------
+      // Real execution error
+      //
+      // Keep the existing error handling for:
+      // - simulation failures
+      // - contract reverts
+      // - RPC failures
+      // - gas estimation failures
+      // - transaction submission failures
+      // ----------------------------------------------------
+
       console.error(
         'Flash loan arbitrage execution failed:',
         error,
@@ -1998,14 +2134,18 @@ function ExecutionPage() {
           <ExecutionRow
             label="Quote Status"
             value={
-              quoteIsStale
-                ? 'STALE'
-                : 'CURRENT'
+              executionState === 'CONFIRMED'
+                ? 'EXECUTED'
+                : quoteIsStale
+                  ? 'STALE'
+                  : 'CURRENT'
             }
             valueClassName={
-              quoteIsStale
-                ? 'text-red-400'
-                : 'text-emerald-400'
+              executionState === 'CONFIRMED'
+                ? 'text-emerald-400'
+                : quoteIsStale
+                  ? 'text-red-400'
+                  : 'text-emerald-400'
             }
           />
 
@@ -2027,12 +2167,17 @@ function ExecutionPage() {
           <div>
 
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              Gross Profit
+              {executionState === 'CONFIRMED'
+                ? 'Confirmed Gross Profit'
+                : 'Estimated Gross Profit'}
             </p>
 
-
             <p className="mt-2 text-xl font-semibold text-white">
-              ${opportunity.grossProfit}
+              $
+              {executionState === 'CONFIRMED' &&
+              confirmedProfit
+                ? confirmedProfit.grossProfitUsdc.toFixed(6)
+                : opportunity.grossProfit}
             </p>
 
           </div>
@@ -2041,12 +2186,18 @@ function ExecutionPage() {
           <div>
 
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              Estimated Net Profit
+              {executionState === 'CONFIRMED'
+                ? 'True Net Profit'
+                : 'Estimated Net Profit'}
             </p>
-
 
             <p className="mt-2 text-3xl font-bold text-emerald-400">
-              ${opportunity.estimatedNetProfit}
+              $
+              {executionState === 'CONFIRMED' &&
+              confirmedProfit &&
+              confirmedProfit.netProfitUsdc !== null
+                ? confirmedProfit.netProfitUsdc.toFixed(6)
+                : opportunity.estimatedNetProfit}
             </p>
 
           </div>
@@ -2055,12 +2206,24 @@ function ExecutionPage() {
           <div>
 
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              Profit
+              {executionState === 'CONFIRMED'
+                ? 'Confirmed Profit'
+                : 'Estimated Profit'}
             </p>
 
-
             <p className="mt-2 text-xl font-semibold text-white">
-              {opportunity.profitPercent}%
+              {executionState === 'CONFIRMED' &&
+              confirmedProfit &&
+              confirmedProfit.netProfitUsdc !== null &&
+              Number(opportunity.loanAmount) > 0
+                ? (
+                    (
+                      confirmedProfit.netProfitUsdc /
+                      Number(opportunity.loanAmount)
+                    ) * 100
+                  ).toFixed(4)
+                : opportunity.profitPercent}
+              %
             </p>
 
           </div>
@@ -2115,29 +2278,32 @@ function ExecutionPage() {
           Quote Stale Warning / Execution Error
           ================================================== */}
 
-      {quoteIsStale && (
-        <section className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-          <p className="text-sm font-semibold text-red-400">
-            Opportunity Quote Is Stale
-          </p>
+      {quoteIsStale &&
+        executionState !== 'CONFIRMED' && (
+          <section className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+            <p className="text-sm font-semibold text-red-400">
+              Opportunity Quote Is Stale
+            </p>
 
-          <p className="mt-2 text-sm text-slate-300">
-            Opportunity quote is stale. Scan again before execution.
-          </p>
-        </section>
-      )}
+            <p className="mt-2 text-sm text-slate-300">
+              Opportunity quote is stale. Scan again before execution.
+            </p>
+          </section>
+        )}
 
-      {executionError && !quoteIsStale && (
-        <section className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
-          <p className="text-sm font-semibold text-red-400">
-            Execution Error
-          </p>
+      {executionError &&
+        !quoteIsStale &&
+        executionState !== 'CONFIRMED' && (
+          <section className="mt-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-5">
+            <p className="text-sm font-semibold text-red-400">
+              Execution Error
+            </p>
 
-          <p className="mt-2 break-words text-sm text-slate-300">
-            {executionError}
-          </p>
-        </section>
-      )}
+            <p className="mt-2 break-words text-sm text-slate-300">
+              {executionError}
+            </p>
+          </section>
+        )}
 
 
       {/* ==================================================

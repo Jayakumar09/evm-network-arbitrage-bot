@@ -1119,6 +1119,108 @@ export function encodeFlashLoanArbitrageParams(
 
         } catch (error: any) {
 
+          // ======================================================
+          // MetaMask user cancellation
+          //
+          // MetaMask / ethers can expose this as:
+          // - code: ACTION_REJECTED
+          // - reason: rejected
+          // - shortMessage containing "user rejected"
+          // - nested info.error.code: 4001
+          //
+          // IMPORTANT:
+          // A user pressing Cancel is NOT a blockchain failure.
+          // There is no transaction hash and no gas is spent.
+          //
+          // Do NOT print the full ethers error object here because
+          // it contains the complete eth_sendTransaction payload
+          // and makes the browser console extremely noisy.
+          //
+          // The original error is still re-thrown unchanged so
+          // ExecutionPage can reset its UI to IDLE.
+          // ======================================================
+
+          const errorObject =
+            error &&
+            typeof error === 'object'
+              ? error as Record<string, unknown>
+              : null
+
+          const nestedInfo =
+            errorObject?.info &&
+            typeof errorObject.info === 'object'
+              ? errorObject.info as Record<string, unknown>
+              : null
+
+          const nestedError =
+            nestedInfo?.error &&
+            typeof nestedInfo.error === 'object'
+              ? nestedInfo.error as Record<string, unknown>
+              : null
+
+          // MetaMask / ethers may expose the rejection code at
+          // different levels depending on the BrowserProvider/RPC
+          // path. Handle both numeric and string forms.
+          const errorCode =
+            errorObject?.code
+
+          const nestedInfoCode =
+            nestedInfo?.code
+
+          const nestedErrorCode =
+            nestedError?.code
+
+          const isUserRejected =
+            errorCode === 4001 ||
+            errorCode === '4001' ||
+            errorCode === 'ACTION_REJECTED' ||
+            nestedInfoCode === 4001 ||
+            nestedInfoCode === '4001' ||
+            nestedErrorCode === 4001 ||
+            nestedErrorCode === '4001' ||
+            errorObject?.reason === 'rejected' ||
+            (
+              typeof errorObject?.shortMessage === 'string' &&
+              errorObject.shortMessage
+                .toLowerCase()
+                .includes('user rejected')
+            ) ||
+            (
+              typeof errorObject?.message === 'string' &&
+              errorObject.message
+                .toLowerCase()
+                .includes('user rejected')
+            )
+
+          if (isUserRejected) {
+
+            console.info(
+              '[FLASH LOAN EXECUTION] USER CANCELLED',
+            )
+
+            console.info(
+              '[FLASH LOAN EXECUTION] MetaMask transaction was rejected by the user.',
+            )
+
+            // --------------------------------------------------
+            // Preserve the original error for ExecutionPage.
+            // ExecutionPage is responsible for resetting the
+            // execution state and closing the confirmation modal.
+            // --------------------------------------------------
+
+            throw error
+          }
+
+          // ======================================================
+          // Real execution error
+          //
+          // Keep detailed diagnostics for actual failures such as:
+          // - contract reverts
+          // - RPC failures
+          // - gas estimation failures
+          // - network errors
+          // ======================================================
+
           console.error(
             '========================================'
           )
@@ -1179,6 +1281,7 @@ export function encodeFlashLoanArbitrageParams(
           throw error
         }
       }
+
 
       // ======================================================
       // Decode completed flash-loan arbitrage transaction

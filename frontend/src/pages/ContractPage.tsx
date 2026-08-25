@@ -165,7 +165,9 @@ function ContractPage() {
     let refreshInProgress = false
 
 
-    async function loadContractData() {
+    async function loadContractData(
+      showLoading = false,
+    ) {
 
       if (refreshInProgress) {
 
@@ -189,7 +191,9 @@ function ContractPage() {
         }
 
 
-        setLoading(true)
+        if (showLoading) {
+          setLoading(true)
+        }
 
         // ------------------------------------------------
         // Connected wallet
@@ -401,7 +405,8 @@ function ContractPage() {
 
 
         if (
-          mounted
+          mounted &&
+          showLoading
         ) {
           setLoading(false)
         }
@@ -416,7 +421,7 @@ function ContractPage() {
     // ==================================================
 
     
-    loadContractData()
+    loadContractData(true)
 
     // ==================================================
     // Automatic refresh
@@ -949,8 +954,8 @@ function ContractPage() {
               Execution Mode
             </p>
 
-            <p className="mt-2 text-sm font-semibold text-amber-400">
-              Mock Execution
+            <p className="mt-2 text-sm font-semibold text-emerald-400">
+              On-Chain
             </p>
 
           </div>
