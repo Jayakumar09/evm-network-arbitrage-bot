@@ -112,7 +112,7 @@ const UNISWAP_V3_QUOTER_V2_ADDRESS =
   '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3'
 
 // V2-compatible router configured in the deployed Executor.
-const V2_ROUTER_ADDRESS =
+export const V2_ROUTER_ADDRESS =
   '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008'
 
 // Uniswap V3 QuoterV2 ABI.

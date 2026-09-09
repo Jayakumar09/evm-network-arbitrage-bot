@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import PaperExecutionHistory from '../components/PaperExecutionHistory'
+
 import {
   getExecutorETHBalance,
   getExecutorUSDCBalance,
@@ -584,6 +586,14 @@ function DashboardPage() {
 
         )}
 
+      </section>
+
+        {/* ==================================================
+          MEV Paper Execution History
+          ================================================== */}
+
+      <section className="mt-6">
+        <PaperExecutionHistory />
       </section>
 
 
