@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   useArbitrage,
@@ -16,6 +20,7 @@ import {
   estimateFlashLoanArbitrage,
   getProvider,
   getAaveFlashLoanPremiumBps,
+  startBlockMonitor,
 } from '../services/blockchain'
 
 import {
@@ -177,66 +182,82 @@ function OpportunityScanner({
     clearOpportunity,
   } = useArbitrage()
 
+    // ====================================================
+    // Automatic Block Scan Protection
+    // ====================================================
+    //
+    // Prevent a new Ethereum block from starting another
+    // scan while the previous six-route scan is still running.
+    //
+    // useRef is intentionally used here instead of state so
+    // the block listener can check the lock immediately without
+    // causing an additional React render.
+    //
+    // ====================================================
 
-  const [
-    tokenIn,
-    setTokenIn,
-  ] = useState('USDC')
-
-
-  const [
-    tokenOut,
-    setTokenOut,
-  ] = useState('WETH')
-
-
-  const [
-    loanAmount,
-    setLoanAmount,
-  ] = useState('100')
+    const scanLockRef =
+      useRef(false)
 
 
-  const [
-    firstDex,
-    setFirstDex,
-  ] = useState<DexType>(
-    'UNISWAP_V3',
-  )
+    const [
+      tokenIn,
+      setTokenIn,
+    ] = useState('USDC')
 
 
-  const [
-    secondDex,
-    setSecondDex,
-  ] = useState<DexType>(
-    'V2_COMPATIBLE',
-  )
+    const [
+      tokenOut,
+      setTokenOut,
+    ] = useState('WETH')
 
 
-  const [
-    uniFee,
-    setUniFee,
-  ] = useState('3000')
+    const [
+      loanAmount,
+      setLoanAmount,
+    ] = useState('100')
 
 
-  const [
-    isScanning,
-    setIsScanning,
-  ] = useState(false)
+    const [
+      firstDex,
+      setFirstDex,
+    ] = useState<DexType>(
+      'UNISWAP_V3',
+    )
 
 
-  const [
-    scanError,
-    setScanError,
-  ] = useState<string | null>(
-    null,
-  )
+    const [
+      secondDex,
+      setSecondDex,
+    ] = useState<DexType>(
+      'V2_COMPATIBLE',
+    )
+
+
+    const [
+      uniFee,
+      setUniFee,
+    ] = useState('3000')
+
+
+    const [
+      isScanning,
+      setIsScanning,
+    ] = useState(false)
+
+
+    const [
+      scanError,
+      setScanError,
+    ] = useState<string | null>(
+      null,
+    )
 
 
   // ====================================================
   // Scan Opportunity
   // ====================================================
 
-  const handleScan = async () => {
+    const handleScan = async () => {
 
     // --------------------------------------------------
     // Clear previous opportunity
@@ -305,6 +326,27 @@ function OpportunityScanner({
 
       return
     }
+
+    // ====================================================
+    // Scan Lock
+    // ====================================================
+    //
+    // Prevent manual scans and automatic block scans
+    // from running at the same time.
+    //
+    // ====================================================
+
+    if (scanLockRef.current) {
+
+      scannerLog(
+        '[SCANNER] Scan skipped — another scan is already running.',
+      )
+
+      return
+    }
+
+    scanLockRef.current =
+      true
 
 
     setIsScanning(true)
@@ -1474,9 +1516,133 @@ function OpportunityScanner({
 
     } finally {
 
-      setIsScanning(false)
-    }
+        setIsScanning(false)
+
+        scanLockRef.current =
+          false
+      }
   }
+
+    // ====================================================
+    // Keep Latest Scan Function
+    // ====================================================
+
+    const handleScanRef =
+      useRef(handleScan)
+
+    useEffect(() => {
+
+      handleScanRef.current =
+        handleScan
+
+    })
+
+      // ====================================================
+      // Automatic Block-Driven Scanner
+      // ====================================================
+      //
+      // The monitor only triggers the EXISTING scanner.
+      //
+      // It does NOT:
+      //   - execute transactions
+      //   - bypass profitability checks
+      //   - create another route scanner
+      //
+      // One Ethereum block can trigger at most one scan.
+      // If the previous scan is still running, the new block
+      // is skipped.
+      //
+      // ====================================================
+
+      useEffect(() => {
+
+        let stopBlockMonitor:
+          (() => void) | null =
+          null
+
+        let cancelled =
+          false
+
+        const startMonitor =
+          async () => {
+
+            try {
+
+              stopBlockMonitor =
+                await startBlockMonitor(
+                    async (
+                      blockNumber: number,
+                    ) => {
+
+                    if (
+                      cancelled
+                    ) {
+                      return
+                    }
+
+                    if (
+                        scanLockRef.current
+                      ) {
+
+                        scannerLog(
+                          '[BLOCK SCANNER] Block skipped:',
+                          blockNumber,
+                          '— scan already running.',
+                        )
+
+                        return
+                      }
+
+                      scannerLog(
+                        '[BLOCK SCANNER] New block:',
+                        blockNumber,
+                        '— starting scan.',
+                      )
+
+                    try {
+
+                      await handleScanRef.current()
+
+                   } finally {
+
+                      scannerLog(
+                        '[BLOCK SCANNER] Scan completed for block:',
+                        blockNumber,
+                      )
+                    }
+                  },
+                )
+
+            } catch (
+              error
+            ) {
+
+              scannerWarn(
+                '[BLOCK SCANNER] Failed to start:',
+                error,
+              )
+            }
+          }
+
+        void startMonitor()
+
+        return () => {
+
+          cancelled =
+            true
+
+          if (
+            stopBlockMonitor
+          ) {
+
+            stopBlockMonitor()
+
+            stopBlockMonitor =
+              null
+          }
+        }
+
+      }, [])
 
 
   // ====================================================

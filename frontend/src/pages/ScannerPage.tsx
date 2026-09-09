@@ -156,7 +156,7 @@ function ScannerPage() {
 
 
                   <p className="mt-2 text-sm text-slate-400">
-                    No profitable arbitrage opportunity found on today.
+                    No profitable arbitrage opportunity found in the current market snapshot.
                     Execution disabled.
                   </p>
 

@@ -2467,6 +2467,61 @@ export async function getProvider(): Promise<BrowserProvider> {
 }
 
 // ======================================================
+// Start Ethereum Block Monitor
+// ======================================================
+//
+// Subscribes to new Ethereum blocks using the existing
+// MetaMask BrowserProvider.
+//
+// This function ONLY monitors blocks.
+// It does NOT scan arbitrage opportunities.
+// It does NOT execute transactions.
+//
+// Returns a cleanup function that removes the listener.
+//
+// ======================================================
+
+export async function startBlockMonitor(
+  onBlock: (blockNumber: number) => void,
+): Promise<() => void> {
+
+  const provider =
+    await getProvider()
+
+  const handleBlock =
+    (blockNumber: number): void => {
+
+      blockchainLog(
+        '[BLOCK MONITOR] New block:',
+        blockNumber,
+      )
+
+      onBlock(blockNumber)
+    }
+
+  provider.on(
+    'block',
+    handleBlock,
+  )
+
+  blockchainLog(
+    '[BLOCK MONITOR] Started',
+  )
+
+  return () => {
+
+    provider.off(
+      'block',
+      handleBlock,
+    )
+
+    blockchainLog(
+      '[BLOCK MONITOR] Stopped',
+    )
+  }
+}
+
+// ======================================================
 // Get Live Aave Flash Loan Premium
 // Ethereum Sepolia
 // ======================================================
