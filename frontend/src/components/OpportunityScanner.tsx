@@ -1569,7 +1569,7 @@ function OpportunityScanner({
             try {
 
               stopBlockMonitor =
-                await startBlockMonitor(
+                  await startBlockMonitor(
                     async (
                       blockNumber: number,
                     ) => {
@@ -1603,7 +1603,7 @@ function OpportunityScanner({
 
                       await handleScanRef.current()
 
-                   } finally {
+                  } finally {
 
                       scannerLog(
                         '[BLOCK SCANNER] Scan completed for block:',
