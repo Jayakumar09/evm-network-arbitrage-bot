@@ -117,29 +117,76 @@ function ScannerPage() {
 
             <div>
 
-              <p className="text-xs uppercase tracking-wider text-emerald-400">
-                Opportunity Found
-              </p>
+              {opportunity.isProfitable ? (
+                <>
+                  <p className="text-xs uppercase tracking-wider text-emerald-400">
+                    Profitable Opportunity
+                  </p>
 
 
-              <h2 className="mt-2 text-xl font-semibold text-white">
-                {opportunity.tokenIn}
-                {' → '}
-                {opportunity.tokenOut}
-                {' → '}
-                {opportunity.tokenIn}
-              </h2>
+                  <h2 className="mt-2 text-xl font-semibold text-white">
+                    {opportunity.tokenIn}
+                    {' → '}
+                    {opportunity.tokenOut}
+                    {' → '}
+                    {opportunity.tokenIn}
+                  </h2>
 
 
-              <p className="mt-2 text-sm text-slate-400">
+                  <p className="mt-2 text-sm text-slate-400">
 
-                Estimated Net Profit:{' '}
+                    Estimated Net Profit:{' '}
 
-                <span className="font-semibold text-emerald-400">
-                  ${opportunity.estimatedNetProfit}
-                </span>
+                    <span className="font-semibold text-emerald-400">
+                      ${opportunity.estimatedNetProfit}
+                    </span>
 
-              </p>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs uppercase tracking-wider text-amber-400">
+                    Scan Complete
+                  </p>
+
+
+                  <h2 className="mt-2 text-xl font-semibold text-white">
+                    Best Route — Not Profitable
+                  </h2>
+
+
+                  <p className="mt-2 text-sm text-slate-400">
+                    No profitable arbitrage opportunity found on today.
+                    Execution disabled.
+                  </p>
+
+
+                  <p className="mt-2 text-sm text-slate-400">
+
+                    Best Route:{' '}
+
+                    <span className="font-semibold text-white">
+                      {opportunity.tokenIn}
+                      {' → '}
+                      {opportunity.tokenOut}
+                      {' → '}
+                      {opportunity.tokenIn}
+                    </span>
+
+                  </p>
+
+
+                  <p className="mt-2 text-sm text-slate-400">
+
+                    Estimated Net Profit:{' '}
+
+                    <span className="font-semibold text-amber-400">
+                      ${opportunity.estimatedNetProfit}
+                    </span>
+
+                  </p>
+                </>
+              )}
 
             </div>
 
@@ -148,15 +195,17 @@ function ScannerPage() {
                 View Opportunity
                 ------------------------------------------------ */}
 
-            <button
-              type="button"
-              onClick={() =>
-                navigate('/opportunity')
-              }
-              className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
-            >
-              View Opportunity
-            </button>
+            {opportunity.isProfitable && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/opportunity')
+                }
+                className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+              >
+                View Opportunity
+              </button>
+            )}
 
           </div>
 

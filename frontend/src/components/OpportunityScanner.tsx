@@ -368,6 +368,7 @@ function OpportunityScanner({
       const evaluateRoute = async (
           routeFirstDex: DexType,
           routeSecondDex: DexType,
+          routeUniFee: number,
           flashLoanPremiumBps: number,
         ): Promise<ArbitrageOpportunity> => {
 
@@ -400,9 +401,7 @@ function OpportunityScanner({
               USDC_ADDRESS,
               WETH_ADDRESS,
               amountIn,
-              Number(
-                uniFee,
-              ),
+              routeUniFee,
             )
 
           scannerLog(
@@ -456,9 +455,7 @@ function OpportunityScanner({
               WETH_ADDRESS,
               USDC_ADDRESS,
               amountOut1Raw,
-              Number(
-                uniFee,
-              ),
+              routeUniFee,
             )
 
           scannerLog(
@@ -721,9 +718,7 @@ function OpportunityScanner({
             firstDexNumber,
             USDC_ADDRESS,
             WETH_ADDRESS,
-            Number(
-              uniFee,
-            ),
+            routeUniFee,
             minOut1Raw,
             minOut2Raw,
             0n,
@@ -1089,9 +1084,7 @@ function OpportunityScanner({
 
           // Keep the fee used by this route.
           uniFee:
-            Number(
-              uniFee,
-            ),
+            routeUniFee,
 
           amountOut1,
           amountOut2,
@@ -1160,54 +1153,95 @@ function OpportunityScanner({
 
 
       // ==================================================
-      // Evaluate BOTH directions
+      // Evaluate ALL V3 fee tiers in BOTH directions
       // ==================================================
+      //
+      // IMPORTANT:
+      // Fee-tier scanning is intentionally kept INTERNAL to
+      // OpportunityScanner. ScannerPage receives only the BEST
+      // completed route through onOpportunityFound().
+      //
+      // Three V3 fee tiers × two directions = six evaluations:
+      //
+      //   V2 → V3-500
+      //   V3-500 → V2
+      //   V2 → V3-3000
+      //   V3-3000 → V2
+      //   V2 → V3-10000
+      //   V3-10000 → V2
+      //
+      // The best route is selected only after all six evaluations
+      // complete. Execution remains gated by isProfitable === true.
+      // ==================================================
+
+      const v3FeeTiers = [
+        500,
+        3000,
+        10000,
+      ]
 
       scannerLog(
         '========================================',
       )
 
       scannerLog(
-        '[LIVE SCANNER] TEST #1:',
-        'V2_COMPATIBLE → UNISWAP_V3',
-      )
-
-
-      const v2ToV3 =
-        await evaluateRoute(
-          'V2_COMPATIBLE',
-          'UNISWAP_V3',
-          flashLoanPremiumBps,
-        )
-
-
-      scannerLog(
-        '========================================',
+        '[LIVE SCANNER] INTERNAL FEE-TIER SCAN:',
+        '500, 3000, 10000',
       )
 
       scannerLog(
-        '[LIVE SCANNER] TEST #2:',
-        'UNISWAP_V3 → V2_COMPATIBLE',
+        '[LIVE SCANNER] TOTAL ROUTES:',
+        v3FeeTiers.length * 2,
       )
 
+      const candidates: ArbitrageOpportunity[] = []
 
-      const v3ToV2 =
-        await evaluateRoute(
-          'UNISWAP_V3',
-          'V2_COMPATIBLE',
-          flashLoanPremiumBps,
+      for (
+        const fee of v3FeeTiers
+      ) {
+
+        scannerLog(
+          '========================================',
         )
 
+        scannerLog(
+          '[LIVE SCANNER] FEE TIER:',
+          fee,
+        )
 
-      // ==================================================
-      // Candidate list
-      // ==================================================
+        scannerLog(
+          '[LIVE SCANNER] TEST:',
+          `V2_COMPATIBLE → UNISWAP_V3 (${fee})`,
+        )
 
-      const candidates =
-        [
-          v2ToV3,
-          v3ToV2,
-        ]
+        candidates.push(
+          await evaluateRoute(
+            'V2_COMPATIBLE',
+            'UNISWAP_V3',
+            fee,
+            flashLoanPremiumBps,
+          ),
+        )
+
+        scannerLog(
+          '========================================',
+        )
+
+        scannerLog(
+          '[LIVE SCANNER] TEST:',
+          `UNISWAP_V3 (${fee}) → V2_COMPATIBLE`,
+        )
+
+        candidates.push(
+          await evaluateRoute(
+            'UNISWAP_V3',
+            'V2_COMPATIBLE',
+            fee,
+            flashLoanPremiumBps,
+          ),
+        )
+      }
+
 
 
       const profitableCandidates =
@@ -1235,64 +1269,22 @@ function OpportunityScanner({
 
 
       // ==================================================
-      // No profitable route
+      // Select the best scanned route
+      // ==================================================
+      //
+      // IMPORTANT:
+      // Always retain the best route from the completed scan.
+      // A route can be the best observed market result while
+      // still being unprofitable.  In that case it is published
+      // with isProfitable === false so the UI can show the scan
+      // result without falsely making it executable.
+      //
+      // The profitability calculation above is NOT changed.
+      // Execution must continue to require isProfitable === true.
       // ==================================================
 
-      if (
-        profitableCandidates.length ===
-        0
-      ) {
-
-        const bestCandidate =
-          candidates.reduce(
-            (
-              best,
-              current,
-            ) =>
-              Number(
-                current.estimatedNetProfit,
-              ) >
-              Number(
-                best.estimatedNetProfit,
-              )
-                ? current
-                : best,
-          )
-
-
-        scannerLog(
-          '[LIVE SCANNER] NO PROFITABLE ROUTE',
-        )
-
-       scannerLog(
-          '[LIVE SCANNER] BEST ROUTE:',
-          `${bestCandidate.firstDex} → ${bestCandidate.secondDex}`,
-        )
-
-       scannerLog(
-          '[LIVE SCANNER] BEST FEE:',
-          bestCandidate.uniFee,
-        )
-
-        scannerLog(
-          '[LIVE SCANNER] BEST NET PROFIT:',
-          bestCandidate.estimatedNetProfit,
-        )
-
-       scannerLog(
-          '[LIVE SCANNER] No opportunity published.',
-        )
-
-        return
-      }
-
-
-      // ==================================================
-      // Find highest-profit route
-      // ==================================================
-
-      const bestOpportunity =
-        profitableCandidates.reduce(
+      const bestCandidate =
+        candidates.reduce(
           (
             best,
             current,
@@ -1313,96 +1305,74 @@ function OpportunityScanner({
       )
 
       scannerLog(
-        '[LIVE SCANNER] BEST PROFITABLE ROUTE:',
-        `${bestOpportunity.firstDex} → ${bestOpportunity.secondDex}`,
+        '[LIVE SCANNER] BEST SCANNED ROUTE:',
+        `${bestCandidate.firstDex} → ${bestCandidate.secondDex}`,
       )
 
       scannerLog(
         '[LIVE SCANNER] BEST FEE:',
-        bestOpportunity.uniFee,
+        bestCandidate.uniFee,
       )
 
       scannerLog(
         '[LIVE SCANNER] BEST NET PROFIT:',
-        bestOpportunity.estimatedNetProfit,
+        bestCandidate.estimatedNetProfit,
       )
 
       scannerLog(
-        '[LIVE SCANNER] PROFITABLE:',
-        bestOpportunity.isProfitable,
+        '[LIVE SCANNER] BEST PROFITABLE:',
+        bestCandidate.isProfitable,
       )
 
-
       // ==================================================
-      // Synchronize UI with BEST route
+      // Synchronize scanner controls with BEST route
       // ==================================================
 
       setFirstDex(
-        bestOpportunity.firstDex,
+        bestCandidate.firstDex,
       )
 
       setSecondDex(
-        bestOpportunity.secondDex,
+        bestCandidate.secondDex,
       )
 
       setUniFee(
         String(
-          bestOpportunity.uniFee,
+          bestCandidate.uniFee,
         ),
       )
 
-
       scannerLog(
         '[LIVE SCANNER] SELECTED ROUTE:',
-        `${bestOpportunity.firstDex} → ${bestOpportunity.secondDex}`,
+        `${bestCandidate.firstDex} → ${bestCandidate.secondDex}`,
       )
 
       scannerLog(
         '[LIVE SCANNER] SELECTED FEE:',
-        bestOpportunity.uniFee,
+        bestCandidate.uniFee,
       )
 
-
       // ==================================================
-      // Publish ONLY the best profitable opportunity
+      // Publish the completed scan snapshot
       // ==================================================
       //
-      // IMPORTANT — quote freshness clock:
+      // The quote timestamp is reset at publication time.
+      // This prevents a sequential scan from publishing a
+      // freshly assembled result as stale merely because the
+      // first route was quoted earlier in the scan.
       //
-      // Each route records quoteTimestamp when ITS own
-      // two-leg quote completed.
-      //
-      // Routes are evaluated sequentially, so for the FIRST
-      // evaluated route that timestamp can be many seconds
-      // old by the time scanning finishes:
-      //
-      //   - the winner's own gas estimation, gas price
-      //     lookup and ETH/USD lookup all run AFTER its
-      //     quoteTimestamp
-      //   - the second route is evaluated completely
-      //     afterwards
-      //
-      // Publishing the mid-scan timestamp would mark a
-      // freshly scanned opportunity as STALE before the
-      // user even reaches the Execution page.
-      //
-      // The 30-second freshness window protects the user's
-      // decision-to-execute window on the PUBLISHED
-      // snapshot, so the clock must start when the
-      // opportunity is published.
-      //
-      // On-chain validity is still enforced separately by
-      // the pre-flight simulation before any real
-      // transaction.
-      //
+      // IMPORTANT:
+      // `isProfitable` is NOT overridden here.
+      // Therefore an unprofitable best route remains safely
+      // marked false for downstream execution checks.
+      // ==================================================
 
       const publishedAt =
         Date.now()
 
       const publishDelayMs =
         publishedAt -
-        bestOpportunity.quoteTimestamp
-
+        bestCandidate.quoteTimestamp
 
       scannerLog(
         '[LIVE SCANNER] Quote assembly delay:',
@@ -1410,27 +1380,43 @@ function OpportunityScanner({
         '— freshness clock starts at publish time.',
       )
 
-
-      const publishedOpportunity = {
-        ...bestOpportunity,
+      const publishedOpportunity: ArbitrageOpportunity = {
+        ...bestCandidate,
 
         quoteTimestamp:
           publishedAt,
 
         isStale:
-          Date.now() -
-            publishedAt >
-          QUOTE_MAX_AGE_MS,
+          false,
       }
-
 
       onOpportunityFound(
         publishedOpportunity,
       )
 
+      if (
+        profitableCandidates.length ===
+        0
+      ) {
+
+        scannerLog(
+          '[LIVE SCANNER] NO PROFITABLE ROUTE',
+        )
+
+        scannerLog(
+          '[LIVE SCANNER] Best route published for diagnostics only.',
+        )
+
+      } else {
+
+        scannerLog(
+          '[LIVE SCANNER] PROFITABLE ROUTE AVAILABLE',
+        )
+
+      }
 
       scannerLog(
-        '[LIVE SCANNER] OPPORTUNITY PUBLISHED',
+        '[LIVE SCANNER] SCAN RESULT PUBLISHED',
       )
 
       scannerLog(
@@ -1714,6 +1700,12 @@ function OpportunityScanner({
         </div>
 
       </div>
+
+      <p className="mt-4 text-xs text-slate-500">
+        Every scan internally evaluates V2 ↔ V3 across
+        0.05%, 0.30%, and 1.00% fee tiers. The best route is
+        published after all six evaluations complete.
+      </p>
 
 
       {/* Scan Button */}
