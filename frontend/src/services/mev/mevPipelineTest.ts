@@ -6,6 +6,7 @@ import { OpportunityDetector } from "./opportunityDetector";
 import { BackrunSimulator } from "./backrunSimulator";
 import {
   quoteMevV2Candidate,
+  revalidateMevV2Candidate,
 } from "./mevV2Quote";
 
 import {
@@ -32,6 +33,10 @@ import type {
 import {
   PaperExecutionService,
 } from "./paperExecution";
+
+import {
+  paperExecutionStore,
+} from "./paperExecutionStore";
 
 import {
   mevOpportunityStore,
@@ -385,7 +390,7 @@ if (import.meta.env.DEV) {
 
                         if (
                           devTransactionMonitorStartupBlock !==
-                          null &&
+                            null &&
                           block.number ===
                             devTransactionMonitorStartupBlock
                         ) {
@@ -416,6 +421,21 @@ if (import.meta.env.DEV) {
                           block.number,
                         );
 
+                        // ==================================================
+                        // PROCESS THE NEW BLOCK FIRST
+                        // ==================================================
+                        //
+                        // The new block must be processed before attempting
+                        // any diagnostic work on the previous opportunity.
+                        //
+                        // This allows a genuinely new monitored transaction
+                        // to create a new FRESH opportunity first.
+                        //
+                        // If a new candidate is published, the store replaces
+                        // the old STALE opportunity and no stale diagnostic
+                        // should be run against the replaced snapshot.
+                        // ==================================================
+
                         console.log(
                           "[MEV PIPELINE TEST] " +
                             "BLOCK -> TRANSACTION MONITOR:",
@@ -425,6 +445,191 @@ if (import.meta.env.DEV) {
                         await devPipelineMonitor.processBlockNumber(
                           block.number,
                         );
+
+                        // ==================================================
+                        // STALE OPPORTUNITY REVALIDATION
+                        // ==================================================
+                        //
+                        // Only inspect the store AFTER the new block has been
+                        // processed.
+                        //
+                        // If the new block produced a new candidate, the store
+                        // now contains that new FRESH opportunity and the old
+                        // stale candidate is no longer the latest snapshot.
+                        //
+                        // If no new candidate was published, the previous
+                        // opportunity remains STALE and can be evaluated as a
+                        // current-state diagnostic.
+                        //
+                        // IMPORTANT:
+                        // - Do NOT replay the original trigger transaction.
+                        // - Do NOT call BackrunSimulator.simulate().
+                        // - Do NOT restore FRESH state.
+                        // - Do NOT enable Paper Execution.
+                        // ==================================================
+
+                        const staleOpportunity =
+                          mevOpportunityStore.getState();
+
+                        if (
+                          staleOpportunity &&
+                          staleOpportunity.freshness ===
+                            "STALE"
+                        ) {
+                          const revalidation =
+                            await revalidateMevV2Candidate(
+                              staleOpportunity.candidate,
+                            );
+
+                          console.log(
+                            "[MEV PIPELINE TEST] " +
+                              "STALE OPPORTUNITY REVALIDATION:",
+                            {
+                              triggerTransactionHash:
+                                revalidation.triggerTransactionHash,
+
+                              success:
+                                revalidation.success,
+
+                              originalExpectedAmountOut:
+                                revalidation
+                                  .originalExpectedAmountOut
+                                  .toString(),
+
+                              currentExpectedAmountOut:
+                                revalidation
+                                  .currentExpectedAmountOut
+                                  .toString(),
+
+                              changed:
+                                revalidation.changed,
+
+                              error:
+                                revalidation.error,
+                            },
+                          );
+
+                          if (revalidation.success) {
+                            console.log(
+                              "[MEV PIPELINE TEST] " +
+                                "STALE OPPORTUNITY QUOTE " +
+                                "REVALIDATION PASSED.",
+                            );
+
+                            // ==================================================
+                            // STALE OPPORTUNITY CURRENT-STATE SIMULATION
+                            // ==================================================
+                            //
+                            // Quote revalidation alone is not enough to make
+                            // a stale opportunity executable.
+                            //
+                            // Evaluate the same candidate size against the
+                            // CURRENT V2 pair state using the dedicated
+                            // current-state simulator.
+                            //
+                            // The result is diagnostic only. The original
+                            // trigger opportunity remains STALE.
+                            // ==================================================
+
+                            if (!devBackrunSimulator) {
+                              console.error(
+                                "[MEV PIPELINE TEST] " +
+                                  "Backrun simulator is unavailable " +
+                                  "for stale current-state simulation.",
+                              );
+                            } else {
+                              const currentStateSimulation =
+                                await devBackrunSimulator.simulateCurrentState(
+                                  staleOpportunity.candidate,
+                                );
+
+                              console.log(
+                                "[MEV PIPELINE TEST] " +
+                                  "STALE OPPORTUNITY CURRENT-STATE " +
+                                  "SIMULATION:",
+                                {
+                                  triggerTransactionHash:
+                                    currentStateSimulation
+                                      .triggerTransactionHash,
+
+                                  success:
+                                    currentStateSimulation.success,
+
+                                  expectedProfit:
+                                    currentStateSimulation
+                                      .expectedProfit
+                                      .toString(),
+
+                                  gasCost:
+                                    currentStateSimulation
+                                      .gasCost
+                                      .toString(),
+
+                                  netProfit:
+                                    currentStateSimulation
+                                      .netProfit
+                                      .toString(),
+
+                                  profitable:
+                                    currentStateSimulation.profitable,
+
+                                  error:
+                                    currentStateSimulation.error,
+                                },
+                              );
+
+                              if (
+                                currentStateSimulation.success &&
+                                currentStateSimulation.profitable
+                              ) {
+                                console.log(
+                                  "[MEV PIPELINE TEST] " +
+                                    "CURRENT-STATE SIMULATION IS " +
+                                    "PROFITABLE, BUT THE ORIGINAL " +
+                                    "OPPORTUNITY REMAINS STALE.",
+                                );
+                              } else if (
+                                currentStateSimulation.success
+                              ) {
+                                console.log(
+                                  "[MEV PIPELINE TEST] " +
+                                    "CURRENT-STATE SIMULATION IS " +
+                                    "NOT PROFITABLE.",
+                                );
+                              } else {
+                                console.error(
+                                  "[MEV PIPELINE TEST] " +
+                                    "STALE OPPORTUNITY CURRENT-STATE " +
+                                    "SIMULATION FAILED:",
+                                  currentStateSimulation.error,
+                                );
+                              }
+
+                              const snapshotAfterCurrentStateSimulation =
+                                mevOpportunityStore.getState();
+
+                              if (
+                                !snapshotAfterCurrentStateSimulation ||
+                                snapshotAfterCurrentStateSimulation.freshness !==
+                                  "STALE"
+                              ) {
+                                console.error(
+                                  "[MEV PIPELINE TEST] " +
+                                    "SAFETY CHECK FAILED: stale opportunity " +
+                                    "must remain STALE after current-state " +
+                                    "simulation.",
+                                );
+                              }
+                            }
+                          } else {
+                            console.error(
+                              "[MEV PIPELINE TEST] " +
+                                "STALE OPPORTUNITY QUOTE " +
+                                "REVALIDATION FAILED:",
+                              revalidation.error,
+                            );
+                          }
+                        }
                       },
 
                     onError:
@@ -984,6 +1189,53 @@ if (import.meta.env.DEV) {
           );
         }
 
+        if (simulation.backrunDex !== "V2") {
+            throw new Error(
+              "BackrunSimulator backrunDex must be V2.",
+            );
+          }
+
+          if (
+            simulation.backrunTokenIn?.toLowerCase() !==
+            candidate.tokenOut?.toLowerCase()
+          ) {
+            throw new Error(
+              "BackrunSimulator backrunTokenIn does not match trigger tokenOut.",
+            );
+          }
+
+          if (
+            simulation.backrunTokenOut?.toLowerCase() !==
+            candidate.tokenIn?.toLowerCase()
+          ) {
+            throw new Error(
+              "BackrunSimulator backrunTokenOut does not match trigger tokenIn.",
+            );
+          }
+
+          if (
+            simulation.backrunAmountIn !==
+            triggerSimulation.amountOut
+          ) {
+            throw new Error(
+              "BackrunSimulator backrunAmountIn does not match trigger amountOut.",
+            );
+          }
+
+          if (
+            simulation.backrunExpectedAmountOut !==
+            backrunStateSimulation.amountOut
+          ) {
+            throw new Error(
+              "BackrunSimulator backrunExpectedAmountOut does not match backrun simulation.",
+            );
+          }
+
+          console.log(
+            "[MEV PIPELINE E2E TEST] " +
+              "Backrun execution data verification PASSED.",
+          );
+
         const expectedGrossProfit =
             backrunStateSimulation.amountOut -
             candidate.amountIn!;
@@ -1251,31 +1503,359 @@ if (import.meta.env.DEV) {
           );
         }
 
-        // Restore a fresh snapshot so the following paper
-        // execution checks continue to represent a newly
-        // published opportunity.
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "MEV Opportunity freshness lifecycle PASSED.",
+        );
+
+        // Mark the same candidate STALE again so the following
+        // Stage 2.3/2.4 tests operate on the required stale
+        // opportunity state.
+        mevOpportunityStore.markStale(
+          candidate.blockNumber + 1,
+        );
+
+        const staleOpportunityBeforeRevalidation =
+          mevOpportunityStore.getState();
+
+        if (
+          !staleOpportunityBeforeRevalidation ||
+          staleOpportunityBeforeRevalidation.freshness !==
+            "STALE"
+        ) {
+          throw new Error(
+            "Stage 2.3 E2E failed: opportunity must be STALE before quote revalidation.",
+          );
+        }
+
+        // ==================================================
+        // STAGE 2.3 / 2.4 — STALE OPPORTUNITY REVALIDATION E2E
+        // ==================================================
+        //
+        // Verify that a stale V2 MEV opportunity can be
+        // revalidated against the current V2 router quote
+        // and evaluated against current V2 pair state.
+        //
+        // IMPORTANT:
+        // - The original trigger is NOT replayed.
+        // - BackrunSimulator is NOT called again.
+        // - Opportunity freshness is NOT restored.
+        // - Paper Execution remains blocked while stale.
+        // ==================================================
+
+        const staleRevalidation =
+          await revalidateMevV2Candidate(
+            candidate,
+          );
+
+        if (!staleRevalidation.success) {
+          throw new Error(
+            "Stage 2.3 E2E failed: stale V2 quote revalidation failed: " +
+              staleRevalidation.error,
+          );
+        }
+
+        if (
+          staleRevalidation.triggerTransactionHash.toLowerCase() !==
+          candidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.3 E2E failed: revalidation trigger transaction hash mismatch.",
+          );
+        }
+
+        if (
+          staleRevalidation.originalExpectedAmountOut !==
+          candidate.expectedAmountOut
+        ) {
+          throw new Error(
+            "Stage 2.3 E2E failed: original expectedAmountOut mismatch.",
+          );
+        }
+
+        if (
+          staleRevalidation.currentExpectedAmountOut <=
+          0n
+        ) {
+          throw new Error(
+            "Stage 2.3 E2E failed: current V2 quote must be greater than zero.",
+          );
+        }
+
+        const staleSnapshotAfterRevalidation =
+          mevOpportunityStore.getState();
+
+        if (!staleSnapshotAfterRevalidation) {
+          throw new Error(
+            "Stage 2.3 E2E failed: opportunity snapshot missing after revalidation.",
+          );
+        }
+
+        if (
+          staleSnapshotAfterRevalidation.freshness !==
+          "STALE"
+        ) {
+          throw new Error(
+            "Stage 2.3 E2E failed: quote revalidation must not restore FRESH state.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "STALE OPPORTUNITY REVALIDATION E2E PASSED.",
+        );
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Original expectedAmountOut:",
+          staleRevalidation
+            .originalExpectedAmountOut
+            .toString(),
+        );
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Current expectedAmountOut:",
+          staleRevalidation
+            .currentExpectedAmountOut
+            .toString(),
+        );
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Quote changed:",
+          staleRevalidation.changed,
+        );
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Opportunity freshness after revalidation:",
+          staleSnapshotAfterRevalidation.freshness,
+        );
+
+        // ==================================================
+        // STAGE 2.4 — CURRENT-STATE SIMULATION E2E
+        // ==================================================
+        //
+        // Verify that the new current-state simulator can
+        // evaluate the stale candidate without replaying
+        // the original trigger transaction.
+        //
+        // IMPORTANT:
+        // - The original trigger hash is preserved.
+        // - The original trigger block is preserved.
+        // - The opportunity remains STALE.
+        // - No wallet/signature/transaction is used.
+        // ==================================================
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Testing stale opportunity current-state simulation...",
+        );
+
+        const currentStateSimulation =
+          await simulator.simulateCurrentState(
+            candidate,
+          );
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "CURRENT-STATE SIMULATION RESULT:",
+          {
+            triggerTransactionHash:
+              currentStateSimulation
+                .triggerTransactionHash,
+
+            success:
+              currentStateSimulation.success,
+
+            expectedProfit:
+              currentStateSimulation
+                .expectedProfit
+                .toString(),
+
+            gasCost:
+              currentStateSimulation
+                .gasCost
+                .toString(),
+
+            netProfit:
+              currentStateSimulation
+                .netProfit
+                .toString(),
+
+            profitable:
+              currentStateSimulation.profitable,
+
+            error:
+              currentStateSimulation.error,
+          },
+        );
+
+        if (!currentStateSimulation.success) {
+          throw new Error(
+            "Stage 2.4 E2E failed: current-state simulation failed: " +
+              currentStateSimulation.error,
+          );
+        }
+
+        if (
+          currentStateSimulation.triggerTransactionHash.toLowerCase() !==
+          candidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.4 E2E failed: current-state simulation trigger hash mismatch.",
+          );
+        }
+
+        if (
+          currentStateSimulation.gasCost <=
+          0n
+        ) {
+          throw new Error(
+            "Stage 2.4 E2E failed: current-state simulation gas cost must be greater than zero.",
+          );
+        }
+
+        const snapshotAfterCurrentStateSimulation =
+          mevOpportunityStore.getState();
+
+        if (!snapshotAfterCurrentStateSimulation) {
+          throw new Error(
+            "Stage 2.4 E2E failed: opportunity snapshot missing after current-state simulation.",
+          );
+        }
+
+        if (
+          snapshotAfterCurrentStateSimulation.freshness !==
+          "STALE"
+        ) {
+          throw new Error(
+            "Stage 2.4 E2E failed: current-state simulation must not restore FRESH state.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "STALE OPPORTUNITY CURRENT-STATE " +
+            "SIMULATION E2E PASSED.",
+        );
+
+        // ==================================================
+        // STAGE 2.6 — NEW OPPORTUNITY REPLACEMENT E2E
+        // ==================================================
+        //
+        // Verify that a genuinely new candidate replaces the
+        // previous STALE opportunity and becomes FRESH.
+        //
+        // IMPORTANT:
+        // - The replacement candidate uses a different trigger hash.
+        // - The replacement candidate uses a newer block number.
+        // - The old STALE snapshot must no longer be the latest snapshot.
+        // - Publishing a new candidate creates a new FRESH snapshot.
+        // - This is an in-memory lifecycle test only.
+        // ==================================================
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "Testing new opportunity replacement...",
+        );
+
+        const replacementCandidate: BackrunCandidate = {
+          ...candidate,
+          triggerTransactionHash:
+            "0x" +
+            "33".repeat(32),
+          blockNumber:
+            candidate.blockNumber + 1,
+          detectedAt:
+            Date.now(),
+        };
+
+        const replacementSimulation:
+          BackrunSimulationResult = {
+          ...profitablePaperSimulation,
+          triggerTransactionHash:
+            replacementCandidate.triggerTransactionHash,
+        };
+
+        mevOpportunityStore.setOpportunity(
+          replacementCandidate,
+          replacementSimulation,
+        );
+
+        const replacementSnapshot =
+          mevOpportunityStore.getState();
+
+        if (!replacementSnapshot) {
+          throw new Error(
+            "Stage 2.6 E2E failed: replacement opportunity was not stored.",
+          );
+        }
+
+        if (
+          replacementSnapshot.freshness !==
+          "FRESH"
+        ) {
+          throw new Error(
+            "Stage 2.6 E2E failed: replacement opportunity was not marked FRESH.",
+          );
+        }
+
+        if (
+          replacementSnapshot.candidate
+            .triggerTransactionHash.toLowerCase() !==
+          replacementCandidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.6 E2E failed: replacement trigger hash mismatch.",
+          );
+        }
+
+        if (
+          replacementSnapshot.candidate.blockNumber !==
+          replacementCandidate.blockNumber
+        ) {
+          throw new Error(
+            "Stage 2.6 E2E failed: replacement block number mismatch.",
+          );
+        }
+
+        if (
+          replacementSnapshot.candidate
+            .triggerTransactionHash.toLowerCase() ===
+          candidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.6 E2E failed: old trigger transaction was not replaced.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE TEST] " +
+            "NEW OPPORTUNITY REPLACEMENT E2E PASSED.",
+        );
+
+        // Restore the original candidate as a newly published
+        // FRESH opportunity so the existing Paper Execution
+        // checks below continue to test their original candidate.
         mevOpportunityStore.setOpportunity(
           candidate,
           profitablePaperSimulation,
         );
 
-        const refreshedMevOpportunity =
+        const restoredFreshSnapshot =
           mevOpportunityStore.getState();
 
         if (
-          !refreshedMevOpportunity ||
-          refreshedMevOpportunity.freshness !==
+          !restoredFreshSnapshot ||
+          restoredFreshSnapshot.freshness !==
             "FRESH"
         ) {
           throw new Error(
-            "MEV Opportunity Store did not restore FRESH state after republishing.",
+            "Stage 2.6 E2E failed: original candidate could not be republished as FRESH for subsequent tests.",
           );
         }
-
-        console.log(
-          "[MEV PIPELINE E2E TEST] " +
-            "MEV Opportunity freshness lifecycle PASSED.",
-        );
 
         const paperExecutionResult =
           paperExecutionService.createPlan(
@@ -1345,6 +1925,53 @@ if (import.meta.env.DEV) {
           );
         }
 
+        if (paperPlan.backrunDex !== "V2") {
+            throw new Error(
+              "Paper execution backrunDex mismatch.",
+            );
+          }
+
+          if (
+            paperPlan.backrunTokenIn.toLowerCase() !==
+            candidate.tokenOut!.toLowerCase()
+          ) {
+            throw new Error(
+              "Paper execution backrunTokenIn mismatch.",
+            );
+          }
+
+          if (
+            paperPlan.backrunTokenOut.toLowerCase() !==
+            candidate.tokenIn!.toLowerCase()
+          ) {
+            throw new Error(
+              "Paper execution backrunTokenOut mismatch.",
+            );
+          }
+
+          if (
+            paperPlan.backrunAmountIn !==
+            triggerSimulation.amountOut
+          ) {
+            throw new Error(
+              "Paper execution backrunAmountIn mismatch.",
+            );
+          }
+
+          if (
+            paperPlan.backrunExpectedAmountOut !==
+            backrunStateSimulation.amountOut
+          ) {
+            throw new Error(
+              "Paper execution backrunExpectedAmountOut mismatch.",
+            );
+          }
+
+          console.log(
+            "[MEV PIPELINE E2E TEST] " +
+              "Paper Execution backrun data verification PASSED.",
+          );
+
         if (
           paperPlan.expectedProfit !==
           profitablePaperSimulation.expectedProfit
@@ -1394,15 +2021,391 @@ if (import.meta.env.DEV) {
           paperPlan,
         );
 
+                // ==================================================
+        // STAGE 2.10 — PAPER EXECUTION SAFETY LIFECYCLE E2E
+        // ==================================================
+        //
+        // Verify that a successfully recorded Paper Execution
+        // becomes non-executable when its opportunity becomes
+        // STALE.
+        //
+        // Lifecycle:
+        //
+        // FRESH opportunity
+        //      ↓
+        // PAPER_ACCEPTED
+        //      ↓
+        // PAPER_RECORDED
+        //      ↓
+        // newer block
+        //      ↓
+        // STALE
+        //      ↓
+        // same trigger rejected
+        //
+        // The rejected stale execution must not change
+        // Paper Execution history.
+        //
+        // This remains strictly paper-only:
+        // - no wallet
+        // - no signature
+        // - no blockchain transaction
+        // ==================================================
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Testing Stage 2.10 Paper Execution safety lifecycle...",
+        );
+
+        // The service returns the accepted plan while the
+        // store records the plan as PAPER_RECORDED.
+        if (
+          paperPlan.state !==
+          "PAPER_ACCEPTED"
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: Paper Execution service did not return PAPER_ACCEPTED state.",
+          );
+        }
+
+        const recordedExecutionsAfterFirstPaperExecution =
+          paperExecutionService.getAll();
+
+        if (
+          recordedExecutionsAfterFirstPaperExecution.length !==
+          1
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: first Paper Execution was not recorded exactly once.",
+          );
+        }
+
+        if (
+          recordedExecutionsAfterFirstPaperExecution[0].state !==
+          "PAPER_RECORDED"
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: stored Paper Execution is not PAPER_RECORDED.",
+          );
+        }
+
+        if (
+          recordedExecutionsAfterFirstPaperExecution[0]
+            .triggerTransactionHash.toLowerCase() !==
+          candidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: recorded Paper Execution trigger hash mismatch.",
+          );
+        }
+
+              // ==================================================
+              // STAGE 2.20 — STORE -> HISTORY BACKRUN DATA E2E
+              // ==================================================
+              //
+              // Verify that the Paper Execution Store preserves
+              // the complete backrun execution data produced by
+              // the PaperExecutionService.
+              //
+              // PaperExecutionHistory reads these same stored plans,
+              // so this verifies the data path:
+              //
+              // BackrunSimulator
+              //      ↓
+              // PaperExecutionPlan
+              //      ↓
+              // PaperExecutionService
+              //      ↓
+              // PaperExecutionStore
+              //      ↓
+              // PaperExecutionHistory
+              //
+              // This remains strictly paper-only.
+              // ==================================================
+
+              const recordedPaperExecution =
+                recordedExecutionsAfterFirstPaperExecution[0];
+
+              if (
+                recordedPaperExecution.backrunDex !==
+                profitablePaperSimulation.backrunDex
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded backrunDex does not match Paper Execution plan.",
+                );
+              }
+
+              if (
+                recordedPaperExecution.backrunTokenIn.toLowerCase() !==
+                profitablePaperSimulation.backrunTokenIn!.toLowerCase()
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded backrunTokenIn does not match Paper Execution plan.",
+                );
+              }
+
+              if (
+                recordedPaperExecution.backrunTokenOut.toLowerCase() !==
+                profitablePaperSimulation.backrunTokenOut!.toLowerCase()
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded backrunTokenOut does not match Paper Execution plan.",
+                );
+              }
+
+              if (
+                recordedPaperExecution.backrunAmountIn !==
+                profitablePaperSimulation.backrunAmountIn
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded backrunAmountIn does not match Paper Execution plan.",
+                );
+              }
+
+              if (
+                recordedPaperExecution.backrunExpectedAmountOut !==
+                profitablePaperSimulation.backrunExpectedAmountOut
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded backrunExpectedAmountOut does not match Paper Execution plan.",
+                );
+              }
+
+              if (
+                recordedPaperExecution.state !==
+                "PAPER_RECORDED"
+              ) {
+                throw new Error(
+                  "Stage 2.20 E2E failed: recorded Paper Execution state must remain PAPER_RECORDED.",
+                );
+              }
+
+              console.log(
+                "[MEV PIPELINE E2E TEST] " +
+                  "Stage 2.20 Store -> History backrun data verification PASSED.",
+              );
+
+        const countBeforeStaleExecution =
+          paperExecutionService.getCount();
+
+        // Simulate arrival of a newer block.
+        mevOpportunityStore.markStale(
+          candidate.blockNumber + 1,
+        );
+
+        const staleSnapshotBeforeExecution =
+          mevOpportunityStore.getState();
+
+        if (
+          !staleSnapshotBeforeExecution ||
+          staleSnapshotBeforeExecution.freshness !==
+            "STALE"
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: opportunity did not become STALE after a newer block.",
+          );
+        }
+
+        if (
+          staleSnapshotBeforeExecution.candidate
+            .triggerTransactionHash.toLowerCase() !==
+          candidate.triggerTransactionHash.toLowerCase()
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: stale opportunity trigger hash changed unexpectedly.",
+          );
+        }
+
+        // Attempt to execute the SAME trigger again.
+        const stalePaperExecution =
+          paperExecutionService.createPlan(
+            candidate,
+            profitablePaperSimulation,
+          );
+
+        if (
+          stalePaperExecution.success
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: stale opportunity was incorrectly accepted for Paper Execution.",
+          );
+        }
+
+        if (
+          stalePaperExecution.error !==
+          "Paper execution rejected: opportunity is stale."
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: stale Paper Execution rejection message is incorrect.",
+          );
+        }
+
+        if (
+          paperExecutionService.getCount() !==
+          countBeforeStaleExecution
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: rejected stale execution changed Paper Execution history.",
+          );
+        }
+
+        const staleSnapshotAfterExecutionAttempt =
+          mevOpportunityStore.getState();
+
+        if (
+          !staleSnapshotAfterExecutionAttempt ||
+          staleSnapshotAfterExecutionAttempt.freshness !==
+            "STALE"
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: stale opportunity changed state after rejected Paper Execution.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Stage 2.10 correctly rejected Paper Execution " +
+            "for STALE opportunity:",
+          stalePaperExecution.error,
+        );
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Stage 2.10 Paper Execution safety lifecycle PASSED.",
+        );
+
+        // Restore the original candidate as a newly published
+        // FRESH opportunity so the remaining Stage 2.9/2.8
+        // negative-profit and replacement-trigger tests continue
+        // from a valid opportunity state.
+        mevOpportunityStore.setOpportunity(
+          candidate,
+          profitablePaperSimulation,
+        );
+
+        const freshSnapshotAfterStaleLifecycle =
+          mevOpportunityStore.getState();
+
+        if (
+          !freshSnapshotAfterStaleLifecycle ||
+          freshSnapshotAfterStaleLifecycle.freshness !==
+            "FRESH"
+        ) {
+          throw new Error(
+            "Stage 2.10 E2E failed: opportunity could not be republished as FRESH after stale lifecycle test.",
+          );
+        }
+
+        // ==================================================
+        // STAGE 2.9 — PAPER EXECUTION STATE VALIDATION
+        // ==================================================
+        //
+        // The PaperExecutionStore must accept only plans that
+        // have been explicitly accepted by PaperExecutionService.
+        // A SIMULATED plan must never be recorded directly.
+        // ==================================================
+
+        const countBeforeInvalidState =
+          paperExecutionService.getCount();
+
+        const simulatedStatePlan = {
+          ...paperPlan,
+          paperExecutionId:
+            `PAPER-INVALID-STATE-${Date.now()}`,
+          state: "SIMULATED" as const,
+        };
+
+        let invalidStateRejected = false;
+
+        try {
+          paperExecutionStore.add(
+            simulatedStatePlan,
+          );
+        } catch (error) {
+          invalidStateRejected = true;
+
+          if (
+            !error ||
+            !(error instanceof Error) ||
+            error.message !==
+              "Paper execution store accepts only PAPER_ACCEPTED plans."
+          ) {
+            throw new Error(
+              "Stage 2.9 E2E failed: invalid state rejection message is incorrect.",
+            );
+          }
+
+          console.log(
+            "[MEV PIPELINE E2E TEST] " +
+              "Stage 2.9 correctly rejected SIMULATED paper plan:",
+            error.message,
+          );
+        }
+
+        if (!invalidStateRejected) {
+          throw new Error(
+            "Stage 2.9 E2E failed: SIMULATED paper plan was incorrectly stored.",
+          );
+        }
+
+        if (
+          paperExecutionService.getCount() !==
+          countBeforeInvalidState
+        ) {
+          throw new Error(
+            "Stage 2.9 E2E failed: rejected invalid-state plan changed paper execution history.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Stage 2.9 paper execution state validation PASSED.",
+        );
+
         // --------------------------------------------------
         // Negative-profit rejection
         // --------------------------------------------------
+        //
+        // Use a deterministic unprofitable simulation so this
+        // safety test does not depend on the current Sepolia
+        // market state of the real simulation above.
+        //
+        // Paper Execution must reject any simulation whose
+        // NET profit is not strictly positive.
+        // --------------------------------------------------
+
+        const unprofitablePaperSimulation:
+          BackrunSimulationResult = {
+          ...profitablePaperSimulation,
+          success: true,
+          expectedProfit: 10000n,
+          gasCost: 10000n,
+          netProfit: 0n,
+          profitable: false,
+        };
 
         const rejectedPaperExecution =
           paperExecutionService.createPlan(
             candidate,
-            simulation,
+            unprofitablePaperSimulation,
           );
+
+        if (
+          rejectedPaperExecution.success
+        ) {
+          throw new Error(
+            "Paper execution incorrectly accepted a non-positive NET-profit simulation.",
+          );
+        }
+
+        if (
+          rejectedPaperExecution.error !==
+          "Paper execution rejected: simulated net profit is not positive."
+        ) {
+          throw new Error(
+            "Paper execution negative-profit rejection message is incorrect.",
+          );
+        }
 
         // --------------------------------------------------
         // Duplicate paper execution rejection
@@ -1435,7 +2438,84 @@ if (import.meta.env.DEV) {
           "[MEV PIPELINE E2E TEST] " +
             "Paper Execution correctly rejected duplicate trigger:",
           duplicatePaperExecution.error,
-        );  
+        );
+
+        // --------------------------------------------------
+        // New trigger acceptance
+        // --------------------------------------------------
+        //
+        // A paper execution recorded for one trigger transaction
+        // must not block a genuinely new opportunity.
+        //
+        // Publish a deterministic replacement opportunity with a
+        // different trigger transaction hash and newer block.
+        // The new opportunity must be FRESH before Paper Execution
+        // can accept it.
+        // --------------------------------------------------
+
+
+        mevOpportunityStore.setOpportunity(
+          replacementCandidate,
+          replacementSimulation,
+        );
+
+        const replacementOpportunity =
+          mevOpportunityStore.getState();
+
+        if (!replacementOpportunity) {
+          throw new Error(
+            "Stage 2.8 E2E failed: replacement opportunity was not published.",
+          );
+        }
+
+        if (
+          replacementOpportunity.freshness !==
+          "FRESH"
+        ) {
+          throw new Error(
+            "Stage 2.8 E2E failed: replacement opportunity must be FRESH.",
+          );
+        }
+
+        if (
+          replacementOpportunity.candidate.triggerTransactionHash ===
+          candidate.triggerTransactionHash
+        ) {
+          throw new Error(
+            "Stage 2.8 E2E failed: replacement opportunity must use a different trigger transaction.",
+          );
+        }
+
+        const replacementPaperExecution =
+          paperExecutionService.createPlan(
+            replacementCandidate,
+            replacementSimulation,
+          );
+
+        if (
+          !replacementPaperExecution.success ||
+          !replacementPaperExecution.plan
+        ) {
+          throw new Error(
+            replacementPaperExecution.error ??
+              "Stage 2.8 E2E failed: a new trigger opportunity was incorrectly blocked by the previous paper execution.",
+          );
+        }
+
+        if (
+          replacementPaperExecution.plan.triggerTransactionHash !==
+          replacementCandidate.triggerTransactionHash
+        ) {
+          throw new Error(
+            "Stage 2.8 E2E failed: replacement paper execution trigger hash mismatch.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Paper Execution correctly accepted new trigger opportunity:",
+          replacementPaperExecution.plan,
+        );
 
         if (
           rejectedPaperExecution.success
@@ -1464,10 +2544,10 @@ if (import.meta.env.DEV) {
           paperExecutionService.getCount();
 
         if (
-          storedPaperExecutionCount !== 1
+          storedPaperExecutionCount !== 2
         ) {
           throw new Error(
-            "Paper execution store count is incorrect after accepted execution.",
+            "Paper execution store count is incorrect after accepting two distinct trigger opportunities.",
           );
         }
 
@@ -1482,7 +2562,7 @@ if (import.meta.env.DEV) {
 
         if (
           latestPaperExecution.paperExecutionId !==
-          paperPlan.paperExecutionId
+          replacementPaperExecution.plan.paperExecutionId
         ) {
           throw new Error(
             "Paper execution store latest plan ID mismatch.",
@@ -1491,7 +2571,7 @@ if (import.meta.env.DEV) {
 
         if (
           latestPaperExecution.triggerTransactionHash !==
-          paperPlan.triggerTransactionHash
+          replacementPaperExecution.plan.triggerTransactionHash
         ) {
           throw new Error(
             "Paper execution store latest trigger hash mismatch.",
@@ -1502,10 +2582,10 @@ if (import.meta.env.DEV) {
           paperExecutionService.getAll();
 
         if (
-          allPaperExecutions.length !== 1
+          allPaperExecutions.length !== 2
         ) {
           throw new Error(
-            "Paper execution store history length is incorrect.",
+            "Paper execution store history length is incorrect after two distinct trigger executions.",
           );
         }
 
@@ -1514,7 +2594,16 @@ if (import.meta.env.DEV) {
           paperPlan.paperExecutionId
         ) {
           throw new Error(
-            "Paper execution store history plan mismatch.",
+            "Paper execution store history first plan mismatch.",
+          );
+        }
+
+        if (
+          allPaperExecutions[1].paperExecutionId !==
+          replacementPaperExecution.plan.paperExecutionId
+        ) {
+          throw new Error(
+            "Paper execution store history replacement plan mismatch.",
           );
         }
 
@@ -1531,7 +2620,7 @@ if (import.meta.env.DEV) {
           paperExecutionService.getCount();
 
         if (
-          countAfterRejectedExecution !== 1
+          countAfterRejectedExecution !== 2
         ) {
           throw new Error(
             "Rejected paper execution incorrectly changed store history.",
