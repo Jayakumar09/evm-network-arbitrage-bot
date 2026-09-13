@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 
 import PaperExecutionHistory from '../components/PaperExecutionHistory'
 
+import MevOpportunityPanel from "../components/MevOpportunityPanel";
+
 import {
   getExecutorETHBalance,
   getExecutorUSDCBalance,
@@ -587,6 +589,13 @@ function DashboardPage() {
         )}
 
       </section>
+
+        {/* ==================================================
+            Phase 2 MEV Paper Opportunity
+            ================================================== */}
+        <section className="mt-6">
+          <MevOpportunityPanel />
+        </section>
 
         {/* ==================================================
           MEV Paper Execution History

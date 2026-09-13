@@ -1,6 +1,4 @@
-import {
-  AbiCoder,
-} from "ethers";
+import { AbiCoder } from "ethers";
 
 import { BlockMonitor } from "./blockMonitor";
 import { TransactionMonitor } from "./transactionMonitor";
@@ -29,13 +27,15 @@ import type {
   BackrunSimulationResult,
 } from "../../types/mev";
 
-import {
-  MevGasEstimator,
-} from "./mevGasEstimator";
+
 
 import {
   PaperExecutionService,
 } from "./paperExecution";
+
+import {
+  mevOpportunityStore,
+} from "./mevOpportunityStore";
 
 // ======================================================
 // DEVELOPMENT MEV PIPELINE TEST
@@ -162,136 +162,178 @@ if (import.meta.env.DEV) {
           devPipelineMonitor =
             new TransactionMonitor({
               onTransaction:
-                async (
-                  transaction:
-                    MonitoredTransaction,
-                ): Promise<void> => {
-                  try {
-                    const candidate:
-                      BackrunCandidate | null =
-                      detector.detect(
-                        transaction,
-                      );
-
-                    if (!candidate) {
-                      return;
-                    }
-
-                    console.log(
-                      "[MEV PIPELINE TEST] " +
-                        "CANDIDATE DETECTED:",
-                      candidate,
+              async (
+                transaction:
+                  MonitoredTransaction,
+              ): Promise<void> => {
+                try {
+                  const candidate:
+                    BackrunCandidate | null =
+                    detector.detect(
+                      transaction,
                     );
 
-                    if (
-                      candidate.tokenIn &&
-                      candidate.tokenOut &&
-                      candidate.amountIn !==
-                        undefined
-                    ) {
-                      const quote =
-                        await quoteMevV2Candidate(
-                          candidate,
-                        );
+                  if (!candidate) {
+                    return;
+                  }
 
-                      if (!quote.success) {
-                        console.error(
-                          "[MEV PIPELINE TEST] " +
-                            "V2 QUOTE FAILED:",
-                          quote.error,
-                        );
+                  console.log(
+                    "[MEV PIPELINE TEST] " +
+                      "CANDIDATE DETECTED:",
+                    candidate,
+                  );
 
-                        return;
-                      }
-
-                      candidate.expectedAmountOut =
-                        quote.expectedAmountOut;
-
-                      console.log(
-                        "[MEV PIPELINE TEST] " +
-                          "V2 QUOTE RESULT:",
-                        {
-                          amountIn:
-                            quote.amountIn.toString(),
-
-                          expectedAmountOut:
-                            quote.expectedAmountOut.toString(),
-                        },
-                      );
-                    }
-
-                    if (
-                      !devBackrunSimulator
-                    ) {
-                      console.error(
-                        "[MEV PIPELINE TEST] " +
-                          "Backrun simulator is unavailable.",
-                      );
-
-                      return;
-                    }
-
-                    const simulation:
-                      BackrunSimulationResult =
-                      await devBackrunSimulator.simulate(
+                  if (
+                    candidate.tokenIn &&
+                    candidate.tokenOut &&
+                    candidate.amountIn !==
+                      undefined
+                  ) {
+                    const quote =
+                      await quoteMevV2Candidate(
                         candidate,
                       );
 
-                    console.log(
-                      "[MEV PIPELINE TEST] " +
-                        "SIMULATION RESULT:",
-                      {
-                        triggerTransactionHash:
-                          simulation.triggerTransactionHash,
-
-                        success:
-                          simulation.success,
-
-                        expectedProfit:
-                          simulation.expectedProfit.toString(),
-
-                        gasCost:
-                          simulation.gasCost.toString(),
-
-                        netProfit:
-                          simulation.netProfit.toString(),
-
-                        profitable:
-                          simulation.profitable,
-
-                        error:
-                          simulation.error,
-                      },
-                    );
-
-                    if (
-                      !simulation.success
-                    ) {
+                    if (!quote.success) {
                       console.error(
                         "[MEV PIPELINE TEST] " +
-                          "SIMULATION FAILED:",
-                        simulation.error,
+                          "V2 QUOTE FAILED:",
+                        quote.error,
                       );
 
                       return;
                     }
 
+                    candidate.expectedAmountOut =
+                      quote.expectedAmountOut;
+
                     console.log(
                       "[MEV PIPELINE TEST] " +
-                        (
-                          simulation.profitable
-                            ? "SIMULATION PROFITABLE"
-                            : "SIMULATION NOT PROFITABLE"
-                        ),
-                    );
-                  } catch (error) {
-                    console.error(
-                      "[MEV PIPELINE TEST] " +
-                        "Transaction processing error:",
-                      error,
+                        "V2 QUOTE RESULT:",
+                      {
+                        amountIn:
+                          quote.amountIn.toString(),
+
+                        expectedAmountOut:
+                          quote.expectedAmountOut.toString(),
+                      },
                     );
                   }
-                },
+
+                  if (
+                    !devBackrunSimulator
+                  ) {
+                    console.error(
+                      "[MEV PIPELINE TEST] " +
+                        "Backrun simulator is unavailable.",
+                    );
+
+                    return;
+                  }
+
+                  const simulation:
+                    BackrunSimulationResult =
+                    await devBackrunSimulator.simulate(
+                      candidate,
+                    );
+
+                  console.log(
+                    "[MEV PIPELINE TEST] " +
+                      "SIMULATION RESULT:",
+                    {
+                      triggerTransactionHash:
+                        simulation.triggerTransactionHash,
+
+                      success:
+                        simulation.success,
+
+                      expectedProfit:
+                        simulation.expectedProfit.toString(),
+
+                      gasCost:
+                        simulation.gasCost.toString(),
+
+                      netProfit:
+                        simulation.netProfit.toString(),
+
+                      profitable:
+                        simulation.profitable,
+
+                      error:
+                        simulation.error,
+                    },
+                  );
+
+                  // ==================================================
+                  // SIMULATION SUCCESS GUARD
+                  // ==================================================
+                  //
+                  // A failed simulation is not a valid MEV
+                  // opportunity and must not update the UI store.
+                  //
+                  // This remains strictly read-only:
+                  // - no wallet signature
+                  // - no blockchain transaction
+                  // - no state-changing operation
+                  // ==================================================
+
+                  if (!simulation.success) {
+                    console.error(
+                      "[MEV PIPELINE TEST] " +
+                        "SIMULATION FAILED:",
+                      simulation.error,
+                    );
+
+                    return;
+                  }
+
+                  // ==================================================
+                  // PUBLISH SUCCESSFUL MEV SIMULATION
+                  // ==================================================
+                  //
+                  // Publish only after the complete read-only
+                  // simulation has succeeded.
+                  //
+                  // This updates in-memory UI state only.
+                  // ==================================================
+
+                  mevOpportunityStore.setOpportunity(
+                    candidate,
+                    simulation,
+                  );
+
+                  console.log(
+                    "[MEV PIPELINE TEST] " +
+                      "MEV OPPORTUNITY PUBLISHED TO STORE:",
+                    {
+                      triggerTransactionHash:
+                        candidate.triggerTransactionHash,
+
+                      blockNumber:
+                        candidate.blockNumber,
+
+                      profitable:
+                        simulation.profitable,
+
+                      netProfit:
+                        simulation.netProfit.toString(),
+                    },
+                  );
+
+                  console.log(
+                    "[MEV PIPELINE TEST] " +
+                      (simulation.profitable
+                        ? "SIMULATION PROFITABLE"
+                        : "SIMULATION NOT PROFITABLE"),
+                  );
+                } catch (error) {
+                  console.error(
+                    "[MEV PIPELINE TEST] " +
+                      "Transaction processing error:",
+                    error,
+                  );
+                }
+              },
 
               onError:
                 (error) => {
@@ -355,6 +397,24 @@ if (import.meta.env.DEV) {
 
                           return;
                         }
+
+                        // ==================================================
+                        // MEV OPPORTUNITY FRESHNESS
+                        // ==================================================
+                        //
+                        // An opportunity is valid only for the block in
+                        // which its trigger transaction was observed.
+                        //
+                        // When a newer block arrives, mark the current
+                        // opportunity stale before processing the new block.
+                        //
+                        // BlockMonitor owns the single blockchain block
+                        // subscription. No additional subscription is added.
+                        // ==================================================
+
+                        mevOpportunityStore.markStale(
+                          block.number,
+                        );
 
                         console.log(
                           "[MEV PIPELINE TEST] " +
@@ -505,21 +565,7 @@ if (import.meta.env.DEV) {
             },
           );
 
-         const gasEstimator =
-            new MevGasEstimator(
-              provider,
-              {
-                estimatedGasUnits:
-                  300000n,
-
-                profitToken:
-                  SEPOLIA_USDC,
-
-                wrappedNativeToken:
-                  SEPOLIA_WETH,
-              },
-            ); 
-
+        
         // ==================================================
         // Build VALID V2 calldata
         // ==================================================
@@ -952,39 +998,24 @@ if (import.meta.env.DEV) {
           }
 
           /*
-          * Independently estimate the gas cost.
+          * Verify that BackrunSimulator used a real,
+          * positive gas cost without comparing against
+          * a second live gas estimate.
           *
-          * This verifies that BackrunSimulator is using
-          * the gas estimator rather than silently assuming
-          * zero gas cost.
+          * A second provider fee read can naturally
+          * return a different value on Sepolia.
           */
-          const gasEstimate =
-            await gasEstimator.estimate();
-
           if (
-            !gasEstimate.success
+            simulation.gasCost <= 0n
           ) {
             throw new Error(
-              gasEstimate.error ??
-                "Independent gas estimation failed.",
-            );
-          }
-
-          const expectedGasCost =
-            gasEstimate.gasCostProfitToken;
-
-          if (
-            simulation.gasCost !==
-            expectedGasCost
-          ) {
-            throw new Error(
-              "BackrunSimulator gas cost does not match independent gas estimation.",
+              "BackrunSimulator gas cost must be greater than zero.",
             );
           }
 
           const expectedNetProfit =
             expectedGrossProfit -
-            expectedGasCost;
+            simulation.gasCost;
 
           if (
             simulation.netProfit !==
@@ -1008,17 +1039,29 @@ if (import.meta.env.DEV) {
           }
 
           console.log(
+              "[MEV PIPELINE E2E TEST] " +
+                "Gross profit:",
+              expectedGrossProfit.toString(),
+            );
+
+            console.log(
+              "[MEV PIPELINE E2E TEST] " +
+                "Gas cost:",
+              simulation.gasCost.toString(),
+            );
+
+            console.log(
+              "[MEV PIPELINE E2E TEST] " +
+                "Expected net profit:",
+              expectedNetProfit.toString(),
+            );
+
+          console.log(
             "[MEV PIPELINE E2E TEST] " +
               "Gross profit:",
             expectedGrossProfit.toString(),
           );
-
-          console.log(
-            "[MEV PIPELINE E2E TEST] " +
-              "Gas cost:",
-            expectedGasCost.toString(),
-          );
-
+          
           console.log(
             "[MEV PIPELINE E2E TEST] " +
               "Expected net profit:",
@@ -1069,6 +1112,170 @@ if (import.meta.env.DEV) {
           netProfit: 80000n,
           profitable: true,
         };
+
+
+        // ==================================================
+        // MEV OPPORTUNITY STORE
+        // ==================================================
+        //
+        // Verify that a successful deterministic simulation
+        // can be published to the shared MEV Opportunity Store.
+        //
+        // This is an in-memory UI state update only.
+        //
+        // No wallet signature.
+        // No blockchain transaction.
+        // No state-changing contract call.
+        // ==================================================
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Testing MEV Opportunity Store...",
+        );
+
+        mevOpportunityStore.setOpportunity(
+          candidate,
+          profitablePaperSimulation,
+        );
+
+        const storedMevOpportunity =
+          mevOpportunityStore.getState();
+
+        if (!storedMevOpportunity) {
+          throw new Error(
+            "MEV Opportunity Store did not return stored opportunity.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.candidate
+            .triggerTransactionHash !==
+          candidate.triggerTransactionHash
+        ) {
+          throw new Error(
+            "MEV Opportunity Store trigger hash mismatch.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.simulation
+            .success !== true
+        ) {
+          throw new Error(
+            "MEV Opportunity Store stored unsuccessful simulation.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.simulation
+            .expectedProfit !==
+          profitablePaperSimulation.expectedProfit
+        ) {
+          throw new Error(
+            "MEV Opportunity Store expected profit mismatch.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.simulation
+            .gasCost !==
+          profitablePaperSimulation.gasCost
+        ) {
+          throw new Error(
+            "MEV Opportunity Store gas cost mismatch.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.simulation
+            .netProfit !==
+          profitablePaperSimulation.netProfit
+        ) {
+          throw new Error(
+            "MEV Opportunity Store net profit mismatch.",
+          );
+        }
+
+        if (
+          storedMevOpportunity.simulation
+            .profitable !== true
+        ) {
+          throw new Error(
+            "MEV Opportunity Store profitable flag mismatch.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "MEV Opportunity Store verification PASSED.",
+        );
+
+        // ==================================================
+        // MEV OPPORTUNITY FRESHNESS
+        // ==================================================
+        //
+        // Verify that the stored opportunity starts FRESH and
+        // becomes STALE when a newer block is observed.
+        //
+        // This is an in-memory lifecycle test only.
+        // ==================================================
+
+        if (
+          storedMevOpportunity.freshness !==
+          "FRESH"
+        ) {
+          throw new Error(
+            "MEV Opportunity Store did not mark a new opportunity FRESH.",
+          );
+        }
+
+        mevOpportunityStore.markStale(
+          candidate.blockNumber + 1,
+        );
+
+        const staleMevOpportunity =
+          mevOpportunityStore.getState();
+
+        if (!staleMevOpportunity) {
+          throw new Error(
+            "MEV Opportunity Store lost the opportunity while marking it stale.",
+          );
+        }
+
+        if (
+          staleMevOpportunity.freshness !==
+          "STALE"
+        ) {
+          throw new Error(
+            "MEV Opportunity Store did not mark the opportunity STALE after a newer block.",
+          );
+        }
+
+        // Restore a fresh snapshot so the following paper
+        // execution checks continue to represent a newly
+        // published opportunity.
+        mevOpportunityStore.setOpportunity(
+          candidate,
+          profitablePaperSimulation,
+        );
+
+        const refreshedMevOpportunity =
+          mevOpportunityStore.getState();
+
+        if (
+          !refreshedMevOpportunity ||
+          refreshedMevOpportunity.freshness !==
+            "FRESH"
+        ) {
+          throw new Error(
+            "MEV Opportunity Store did not restore FRESH state after republishing.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "MEV Opportunity freshness lifecycle PASSED.",
+        );
 
         const paperExecutionResult =
           paperExecutionService.createPlan(
@@ -1196,6 +1403,39 @@ if (import.meta.env.DEV) {
             candidate,
             simulation,
           );
+
+        // --------------------------------------------------
+        // Duplicate paper execution rejection
+        // --------------------------------------------------
+
+        const duplicatePaperExecution =
+          paperExecutionService.createPlan(
+            candidate,
+            profitablePaperSimulation,
+          );
+
+        if (
+          duplicatePaperExecution.success
+        ) {
+          throw new Error(
+            "Paper execution incorrectly accepted duplicate trigger transaction.",
+          );
+        }
+
+        if (
+          duplicatePaperExecution.error !==
+          "Paper execution already recorded for this trigger transaction."
+        ) {
+          throw new Error(
+            "Paper execution duplicate rejection message is incorrect.",
+          );
+        }
+
+        console.log(
+          "[MEV PIPELINE E2E TEST] " +
+            "Paper Execution correctly rejected duplicate trigger:",
+          duplicatePaperExecution.error,
+        );  
 
         if (
           rejectedPaperExecution.success

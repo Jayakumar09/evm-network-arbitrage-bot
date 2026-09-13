@@ -10,11 +10,13 @@ import './index.css'
 import "./services/mev/blockMonitor";
 import "./services/mev/transactionMonitor";
 import "./services/mev/opportunityDetector";
+import "./services/mev/mevOpportunityStore";
 import "./services/mev/mevPipelineTest";
 import "./services/mev/mevV2Quote";
 import "./services/mev/v2PairState";
 import "./services/mev/v2StateSimulator";
 import "./services/mev/mevGasEstimator";
+
 
 import App from './App.tsx'
 
