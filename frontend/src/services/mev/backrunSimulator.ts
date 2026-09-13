@@ -379,23 +379,39 @@ export class BackrunSimulator {
         result.netProfit > 0n &&
         result.netProfit >= minimumProfit;
 
-      return {
-        success: true,
+            return {
+              success: true,
 
-        triggerTransactionHash:
-          candidate.triggerTransactionHash,
+              triggerTransactionHash:
+                candidate.triggerTransactionHash,
 
-        expectedProfit:
-          result.grossProfit,
+              // Backrun execution data
+              backrunDex:
+                "V2",
 
-        gasCost:
-          result.totalCosts,
+              backrunTokenIn:
+                candidate.tokenOut,
 
-        netProfit:
-          result.netProfit,
+              backrunTokenOut:
+                candidate.tokenIn,
 
-        profitable,
-      };
+              backrunAmountIn:
+                triggerSimulation.amountOut,
+
+              backrunExpectedAmountOut:
+                backrunSimulation.amountOut,
+
+              expectedProfit:
+                result.grossProfit,
+
+              gasCost:
+                result.totalCosts,
+
+              netProfit:
+                result.netProfit,
+
+              profitable,
+            };
     } catch (error) {
       return {
         success: false,
@@ -418,4 +434,155 @@ export class BackrunSimulator {
       };
     }
   }
+  async simulateCurrentState(
+    candidate: BackrunCandidate,
+  ): Promise<BackrunSimulationResult> {
+    try {
+      if (!candidate.triggerTransactionHash) {
+        throw new Error(
+          "Trigger transaction hash is required",
+        );
+      }
+
+      if (!candidate.tokenIn || !candidate.tokenOut) {
+        throw new Error(
+          "V2 candidate tokenIn and tokenOut are required",
+        );
+      }
+
+      if (
+        candidate.amountIn === undefined ||
+        candidate.amountIn <= 0n
+      ) {
+        throw new Error(
+          "V2 candidate amountIn must be greater than zero",
+        );
+      }
+
+      const pairState =
+        await getV2PairState(
+          this.provider,
+          candidate.tokenIn,
+          candidate.tokenOut,
+        );
+
+      const currentSwapSimulation =
+        simulateV2Swap(
+          pairState,
+          candidate.tokenIn,
+          candidate.tokenOut,
+          candidate.amountIn,
+        );
+
+      if (currentSwapSimulation.amountOut <= 0n) {
+        throw new Error(
+          "Current-state swap returned zero",
+        );
+      }
+
+      const currentPostSwapPairState = {
+        ...pairState,
+        reserve0: currentSwapSimulation.newReserve0,
+        reserve1: currentSwapSimulation.newReserve1,
+      };
+
+      const currentBackrunSimulation =
+        simulateV2Swap(
+          currentPostSwapPairState,
+          candidate.tokenOut,
+          candidate.tokenIn,
+          currentSwapSimulation.amountOut,
+        );
+
+      const expectedReturnAmount =
+        currentBackrunSimulation.amountOut;
+
+      if (expectedReturnAmount <= 0n) {
+        throw new Error(
+          "Current-state backrun returned zero",
+        );
+      }
+
+      const gasEstimate =
+        await this.gasEstimator.estimate();
+
+      if (!gasEstimate.success) {
+        throw new Error(
+          gasEstimate.error ??
+          "MEV gas estimation failed",
+        );
+      }
+
+      const gasCostProfitToken =
+        gasEstimate.gasCostProfitToken;
+
+      if (gasCostProfitToken <= 0n) {
+        throw new Error(
+          "MEV gas cost in profit token must be greater than zero",
+        );
+      }
+
+      const result =
+        this.calculator.calculate({
+          expectedRevenue: expectedReturnAmount,
+          flashLoanRepayment: candidate.amountIn,
+          gasCost: gasCostProfitToken,
+        });
+
+      const minimumProfit =
+        this.config.minimumProfit ?? 0n;
+
+      const profitable =
+        result.netProfit > 0n &&
+        result.netProfit >= minimumProfit;
+
+            return {
+              success: true,
+
+              triggerTransactionHash:
+                candidate.triggerTransactionHash,
+
+              // Backrun execution data
+              backrunDex:
+                "V2",
+
+              backrunTokenIn:
+                candidate.tokenOut,
+
+              backrunTokenOut:
+                candidate.tokenIn,
+
+              backrunAmountIn:
+                currentSwapSimulation.amountOut,
+
+              backrunExpectedAmountOut:
+                currentBackrunSimulation.amountOut,
+
+              expectedProfit:
+                result.grossProfit,
+
+              gasCost:
+                result.totalCosts,
+
+              netProfit:
+                result.netProfit,
+
+              profitable,
+            };
+    } catch (error) {
+      return {
+        success: false,
+        triggerTransactionHash: candidate.triggerTransactionHash,
+        expectedProfit: 0n,
+        gasCost: 0n,
+        netProfit: 0n,
+        profitable: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown current-state simulation error",
+      };
+    }
+  }
+
 }

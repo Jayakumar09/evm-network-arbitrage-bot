@@ -48,6 +48,12 @@ export class PaperExecutionStore {
         );
       }
 
+      if (plan.state !== "PAPER_ACCEPTED") {
+        throw new Error(
+          "Paper execution store accepts only PAPER_ACCEPTED plans.",
+        );
+      }
+
       const recordedPlan: PaperExecutionPlan = {
         ...plan,
         state:

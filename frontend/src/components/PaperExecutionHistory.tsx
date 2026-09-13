@@ -192,6 +192,10 @@ function PaperExecutionHistory() {
               </th>
 
               <th className="px-6 py-4 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Backrun
+              </th>
+
+              <th className="px-6 py-4 text-xs font-medium uppercase tracking-wide text-slate-400">
                 Amount In
               </th>
 
@@ -255,6 +259,42 @@ function PaperExecutionHistory() {
                       {shortenAddress(
                         execution.tokenOut,
                       )}
+                    </p>
+                  </td>
+
+                  <td className="px-6 py-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">
+                      {execution.backrunDex}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-300">
+                      {shortenAddress(
+                        execution.backrunTokenIn,
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      →
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-300">
+                      {shortenAddress(
+                        execution.backrunTokenOut,
+                      )}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      In:{" "}
+                      <span className="font-mono text-slate-300">
+                        {execution.backrunAmountIn.toString()}
+                      </span>
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Out:{" "}
+                      <span className="font-mono text-slate-300">
+                        {execution.backrunExpectedAmountOut.toString()}
+                      </span>
                     </p>
                   </td>
 
@@ -351,6 +391,60 @@ function PaperExecutionHistory() {
                     {shortenAddress(
                       execution.tokenOut,
                     )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Backrun DEX
+                  </p>
+
+                  <p className="mt-1 text-xs font-semibold uppercase text-emerald-400">
+                    {execution.backrunDex}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Backrun Token In
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-slate-300">
+                    {shortenAddress(
+                      execution.backrunTokenIn,
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Backrun Token Out
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-slate-300">
+                    {shortenAddress(
+                      execution.backrunTokenOut,
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Backrun Amount In
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-slate-300">
+                    {execution.backrunAmountIn.toString()}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Expected Backrun Out
+                  </p>
+
+                  <p className="mt-1 font-mono text-xs text-slate-300">
+                    {execution.backrunExpectedAmountOut.toString()}
                   </p>
                 </div>
 

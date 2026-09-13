@@ -212,6 +212,25 @@ export default function MevOpportunityPanel() {
       ? candidate.expectedAmountOut.toString()
       : "—";
 
+  const backrunDex =
+    simulation.backrunDex ?? "—";
+
+  const backrunTokenIn =
+    simulation.backrunTokenIn ?? "—";
+
+  const backrunTokenOut =
+    simulation.backrunTokenOut ?? "—";
+
+  const backrunAmountIn =
+    simulation.backrunAmountIn !== undefined
+      ? simulation.backrunAmountIn.toString()
+      : "—";
+
+  const backrunExpectedAmountOut =
+    simulation.backrunExpectedAmountOut !== undefined
+      ? simulation.backrunExpectedAmountOut.toString()
+      : "—";
+
   const updatedTime =
     new Date(updatedAt).toLocaleTimeString();
 
@@ -453,6 +472,72 @@ export default function MevOpportunityPanel() {
 
         <p className="mt-3 text-sm text-slate-400">
           {candidate.description}
+        </p>
+      </div>
+
+      {/* ------------------------------------------------
+          Backrun Execution
+      ------------------------------------------------ */}
+
+      <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+        <p className="text-xs uppercase tracking-wider text-slate-500">
+          Backrun Execution
+        </p>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              DEX
+            </p>
+
+            <p className="mt-2 text-sm font-semibold text-white">
+              {backrunDex}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              Token In
+            </p>
+
+            <p className="mt-2 break-all font-mono text-xs text-slate-300">
+              {backrunTokenIn}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              Token Out
+            </p>
+
+            <p className="mt-2 break-all font-mono text-xs text-slate-300">
+              {backrunTokenOut}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              Backrun Amount In
+            </p>
+
+            <p className="mt-2 break-all text-sm font-semibold text-white">
+              {backrunAmountIn}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-500">
+              Expected Backrun Out
+            </p>
+
+            <p className="mt-2 break-all text-sm font-semibold text-white">
+              {backrunExpectedAmountOut}
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-4 text-sm text-slate-400">
+          Reverse V2 leg simulated after the trigger transaction.
         </p>
       </div>
 

@@ -22,6 +22,8 @@ export interface TransactionMonitorOptions {
   addresses?: string[];
 }
 
+export type MevDex = "V2" | "V3";
+
 export interface BackrunCandidate {
   triggerTransactionHash: string;
   blockNumber: number;
@@ -31,6 +33,19 @@ export interface BackrunCandidate {
 
   amountIn?: bigint;
   expectedAmountOut?: bigint;
+
+  // Future backrun execution data
+  backrunDex?: MevDex;
+  backrunTokenIn?: string;
+  backrunTokenOut?: string;
+  backrunAmountIn?: bigint;
+  backrunExpectedAmountOut?: bigint;
+  backrunMinAmountOut?: bigint;
+
+  // Future flash-loan execution data
+  flashLoanAsset?: string;
+  flashLoanAmount?: bigint;
+  minProfit?: bigint;
 
   description: string;
 
@@ -83,6 +98,14 @@ export type PaperExecutionState =
 export interface PaperExecutionPlan {
   paperExecutionId: string;
   triggerTransactionHash: string;
+
+  // Backrun execution data
+  backrunDex: MevDex;
+  backrunTokenIn: string;
+  backrunTokenOut: string;
+  backrunAmountIn: bigint;
+  backrunExpectedAmountOut: bigint;
+
   blockNumber: number;
   tokenIn: string;
   tokenOut: string;
@@ -119,4 +142,25 @@ export interface MevProfitResult {
   totalCosts: bigint;
   netProfit: bigint;
   profitable: boolean;
+}
+
+export interface BackrunSimulationResult {
+  success: boolean;
+
+  triggerTransactionHash: string;
+
+  // Backrun execution data
+  backrunDex?: MevDex;
+  backrunTokenIn?: string;
+  backrunTokenOut?: string;
+  backrunAmountIn?: bigint;
+  backrunExpectedAmountOut?: bigint;
+
+  expectedProfit: bigint;
+  gasCost: bigint;
+  netProfit: bigint;
+
+  profitable: boolean;
+
+  error?: string;
 }

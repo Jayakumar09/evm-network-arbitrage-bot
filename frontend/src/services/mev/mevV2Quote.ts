@@ -18,6 +18,20 @@ export interface MevV2QuoteResult {
   error?: string;
 }
 
+export interface MevV2RevalidationResult {
+  success: boolean;
+
+  triggerTransactionHash: string;
+
+  originalExpectedAmountOut: bigint;
+  currentExpectedAmountOut: bigint;
+
+  changed: boolean;
+
+  error?: string;
+}
+
+
 /**
  * Get a read-only V2 quote for a decoded MEV candidate.
  *
@@ -95,6 +109,121 @@ export async function quoteMevV2Candidate(
         error instanceof Error
           ? error.message
           : "Unknown V2 quote error",
+    };
+  }
+}
+
+/**
+ * Revalidate a V2 MEV candidate against the
+ * current V2 router quote.
+ *
+ * IMPORTANT:
+ * - This does NOT replay the trigger transaction.
+ * - This does NOT run BackrunSimulator.
+ * - This does NOT send a transaction.
+ * - This does NOT modify blockchain state.
+ *
+ * The purpose is only to determine whether the
+ * same candidate route and amount can still obtain
+ * a valid current V2 quote.
+ */
+export async function revalidateMevV2Candidate(
+  candidate: BackrunCandidate,
+): Promise<MevV2RevalidationResult> {
+  try {
+    if (!candidate.triggerTransactionHash) {
+      throw new Error(
+        "Trigger transaction hash is required.",
+      );
+    }
+
+    if (!candidate.tokenIn) {
+      throw new Error(
+        "V2 revalidation requires tokenIn.",
+      );
+    }
+
+    if (!candidate.tokenOut) {
+      throw new Error(
+        "V2 revalidation requires tokenOut.",
+      );
+    }
+
+    if (
+      candidate.amountIn === undefined ||
+      candidate.amountIn <= 0n
+    ) {
+      throw new Error(
+        "V2 revalidation requires amountIn greater than zero.",
+      );
+    }
+
+    if (
+      candidate.expectedAmountOut === undefined ||
+      candidate.expectedAmountOut <= 0n
+    ) {
+      throw new Error(
+        "V2 revalidation requires the original expectedAmountOut.",
+      );
+    }
+
+    const quote =
+      await quoteMevV2Candidate(
+        candidate,
+      );
+
+    if (!quote.success) {
+      throw new Error(
+        quote.error ??
+          "Current V2 quote failed during revalidation.",
+      );
+    }
+
+    if (
+      quote.expectedAmountOut <= 0n
+    ) {
+      throw new Error(
+        "Current V2 quote returned zero.",
+      );
+    }
+
+    const changed =
+      quote.expectedAmountOut !==
+      candidate.expectedAmountOut;
+
+    return {
+      success: true,
+
+      triggerTransactionHash:
+        candidate.triggerTransactionHash,
+
+      originalExpectedAmountOut:
+        candidate.expectedAmountOut,
+
+      currentExpectedAmountOut:
+        quote.expectedAmountOut,
+
+      changed,
+    };
+  } catch (error) {
+    return {
+      success: false,
+
+      triggerTransactionHash:
+        candidate.triggerTransactionHash,
+
+      originalExpectedAmountOut:
+        candidate.expectedAmountOut ?? 0n,
+
+      currentExpectedAmountOut:
+        0n,
+
+      changed: false,
+
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown V2 revalidation error",
     };
   }
 }
