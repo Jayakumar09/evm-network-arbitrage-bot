@@ -52,19 +52,7 @@ export interface BackrunCandidate {
   detectedAt: number;
 }
 
-export interface BackrunSimulationResult {
-  success: boolean;
 
-  triggerTransactionHash: string;
-
-  expectedProfit: bigint;
-  gasCost: bigint;
-  netProfit: bigint;
-
-  profitable: boolean;
-
-  error?: string;
-}
 
 // ======================================================
 // Paper Execution
