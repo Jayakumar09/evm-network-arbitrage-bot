@@ -345,6 +345,22 @@ export class BackrunSimulator {
        *
        * Calculate profitability.
        *
+       * IMPORTANT:
+       *
+       * This is a THEORETICAL profitability model.
+       *
+       * candidate.amountIn represents the simulated
+       * flash-loan repayment amount in the current
+       * Phase 2 model.
+       *
+       * triggerSimulation.amountOut is a theoretical
+       * post-trigger output and is NOT treated as a
+       * token balance owned by the Executor.
+       *
+       * This calculation does NOT prove that the
+       * future Executor can perform the complete
+       * flash-loan-backed backrun.
+       *
        * Revenue:
        *   Amount returned by the backrun.
        *
