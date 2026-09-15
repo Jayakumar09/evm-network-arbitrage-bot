@@ -733,6 +733,215 @@ export function encodeFlashLoanArbitrageParams(
   return params
 }
 
+// ======================================================
+// Encode MEV Backrun Parameters
+// Operation 3 - Aave-only
+//
+// Solidity expects:
+//
+// params = abi.encode(
+//     uint8 operationType,
+//     bytes operationData
+// )
+//
+// operationType = 3
+//
+// operationData = abi.encode(
+//     uint8 dex1,
+//     uint8 dex2,
+//     address tokenIn,
+//     address tokenOut,
+//     uint24 uniFee1,
+//     uint24 uniFee2,
+//     uint256 minOut1,
+//     uint256 minOut2,
+//     uint256 minProfit
+// )
+//
+// dex:
+// 0 = Uniswap V3
+// 1 = SushiSwap / V2-compatible DEX
+//
+// Route:
+// tokenIn -> tokenOut -> tokenIn
+//
+// IMPORTANT:
+// This function ONLY encodes calldata.
+// It does NOT execute a transaction.
+// ======================================================
+
+export function encodeMevBackrunParams(
+  dex1: number,
+  dex2: number,
+  tokenIn: string,
+  tokenOut: string,
+  uniFee1: number,
+  uniFee2: number,
+  minOut1: bigint,
+  minOut2: bigint,
+  minProfit: bigint,
+): string {
+  blockchainLog('========================================')
+  blockchainLog('[MEV BACKRUN PARAM ENCODER] START')
+  blockchainLog('========================================')
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] dex1:',
+    dex1,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] dex2:',
+    dex2,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] tokenIn:',
+    tokenIn,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] tokenOut:',
+    tokenOut,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] uniFee1:',
+    uniFee1,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] uniFee2:',
+    uniFee2,
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] minOut1:',
+    minOut1.toString(),
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] minOut2:',
+    minOut2.toString(),
+  )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] minProfit:',
+    minProfit.toString(),
+  )
+
+  if (dex1 !== 0 && dex1 !== 1) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] Invalid dex1. Expected 0 or 1.',
+    )
+  }
+
+  if (dex2 !== 0 && dex2 !== 1) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] Invalid dex2. Expected 0 or 1.',
+    )
+  }
+
+  if (!tokenIn || tokenIn === '0x') {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] tokenIn is required.',
+    )
+  }
+
+  if (!tokenOut || tokenOut === '0x') {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] tokenOut is required.',
+    )
+  }
+
+  if (
+    tokenIn.toLowerCase() ===
+    tokenOut.toLowerCase()
+  ) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] tokenIn and tokenOut must differ.',
+    )
+  }
+
+  if (minOut1 <= 0n) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] minOut1 must be greater than zero.',
+    )
+  }
+
+  if (minOut2 <= 0n) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] minOut2 must be greater than zero.',
+    )
+  }
+
+  if (minProfit < 0n) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] minProfit cannot be negative.',
+    )
+  }
+
+  if (dex1 === 0 && uniFee1 === 0) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] uniFee1 must be non-zero for Uniswap V3.',
+    )
+  }
+
+  if (dex2 === 0 && uniFee2 === 0) {
+    throw new Error(
+      '[MEV BACKRUN PARAM ENCODER] uniFee2 must be non-zero for Uniswap V3.',
+    )
+  }
+
+  const abiCoder = AbiCoder.defaultAbiCoder()
+
+  const operationData =
+    abiCoder.encode(
+      [
+        'uint8',
+        'uint8',
+        'address',
+        'address',
+        'uint24',
+        'uint24',
+        'uint256',
+        'uint256',
+        'uint256',
+      ],
+      [
+        dex1,
+        dex2,
+        tokenIn,
+        tokenOut,
+        uniFee1,
+        uniFee2,
+        minOut1,
+        minOut2,
+        minProfit,
+      ],
+    )
+
+  const params =
+    abiCoder.encode(
+      [
+        'uint8',
+        'bytes',
+      ],
+      [
+        3,
+        operationData,
+      ],
+    )
+
+  blockchainLog(
+    '[MEV BACKRUN PARAM ENCODER] SUCCESS',
+  )
+
+  blockchainLog('========================================')
+
+  return params
+}
+
         // ======================================================
         // Simulate Flash Loan Arbitrage
         // Ethereum Sepolia

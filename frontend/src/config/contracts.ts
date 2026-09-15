@@ -10,7 +10,7 @@ export const SEPOLIA_CHAIN_ID = 11155111
 // ======================================================
 
 export const EXECUTOR_CONTRACT_ADDRESS =
-  '0x33f10323b54A26a6b9e10B1279424508dB065d9d'
+  '0x40E8Ce92986aDED21739dE35515a4B079873c698'
 
 // ======================================================
 // const UNISWAP_V3_QUOTER_V2_ADDRESS =

@@ -1,5 +1,5 @@
 import { AbiCoder } from "ethers";
-
+import { encodeMevBackrunParams } from '../blockchain'
 import { BlockMonitor } from "./blockMonitor";
 import { TransactionMonitor } from "./transactionMonitor";
 import { OpportunityDetector } from "./opportunityDetector";
@@ -2735,5 +2735,190 @@ if (import.meta.env.DEV) {
           error,
         );
       }
+    };
+
+  // ====================================================
+  // STAGE 2.26.7 - DETERMINISTIC OPERATION 3 ENCODING TEST
+  // ====================================================
+  // Verifies frontend encoding matches the Solidity
+  // Operation 3 ABI structure.
+  //
+  // This test ONLY encodes/decodes calldata.
+  // It does NOT send a transaction.
+  // ====================================================
+
+  (window as any).testOperation3Encoding =
+    (): void => {
+      console.log('========================================')
+      console.log('[OPERATION 3 ENCODING TEST] START')
+      console.log('========================================')
+
+      const tokenIn =
+        '0x1111111111111111111111111111111111111111'
+
+      const tokenOut =
+        '0x2222222222222222222222222222222222222222'
+
+      const dex1 = 0
+      const dex2 = 1
+
+      const uniFee1 = 3000
+      const uniFee2 = 0
+
+      const minOut1 = 950000000000000000n
+      const minOut2 = 1000000000n
+      const minProfit = 1000000n
+
+      const params = encodeMevBackrunParams(
+        dex1,
+        dex2,
+        tokenIn,
+        tokenOut,
+        uniFee1,
+        uniFee2,
+        minOut1,
+        minOut2,
+        minProfit,
+      )
+
+      if (!params.startsWith('0x')) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] Encoded params must start with 0x',
+        )
+      }
+
+      // Decode using the exact Solidity ABI structure.
+      const [operationType, operationData] =
+        abiCoder.decode(
+          ['uint8', 'bytes'],
+          params,
+        )
+
+      if (Number(operationType) !== 3) {
+        throw new Error(
+          `[OPERATION 3 ENCODING TEST] Expected operationType 3, got ${operationType}`,
+        )
+      }
+
+      const decoded =
+        abiCoder.decode(
+          [
+            'uint8',
+            'uint8',
+            'address',
+            'address',
+            'uint24',
+            'uint24',
+            'uint256',
+            'uint256',
+            'uint256',
+          ],
+          operationData,
+        )
+
+      if (Number(decoded[0]) !== dex1) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] dex1 mismatch',
+        )
+      }
+
+      if (Number(decoded[1]) !== dex2) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] dex2 mismatch',
+        )
+      }
+
+      if (
+        decoded[2].toLowerCase() !==
+        tokenIn.toLowerCase()
+      ) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] tokenIn mismatch',
+        )
+      }
+
+      if (
+        decoded[3].toLowerCase() !==
+        tokenOut.toLowerCase()
+      ) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] tokenOut mismatch',
+        )
+      }
+
+      if (Number(decoded[4]) !== uniFee1) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] uniFee1 mismatch',
+        )
+      }
+
+      if (Number(decoded[5]) !== uniFee2) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] uniFee2 mismatch',
+        )
+      }
+
+      if (decoded[6] !== minOut1) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] minOut1 mismatch',
+        )
+      }
+
+      if (decoded[7] !== minOut2) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] minOut2 mismatch',
+        )
+      }
+
+      if (decoded[8] !== minProfit) {
+        throw new Error(
+          '[OPERATION 3 ENCODING TEST] minProfit mismatch',
+        )
+      }
+
+      console.log(
+        '[OPERATION 3 ENCODING TEST] operationType:',
+        Number(operationType),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] dex1:',
+        Number(decoded[0]),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] dex2:',
+        Number(decoded[1]),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] tokenIn:',
+        decoded[2],
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] tokenOut:',
+        decoded[3],
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] uniFee1:',
+        Number(decoded[4]),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] uniFee2:',
+        Number(decoded[5]),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] minOut1:',
+        decoded[6].toString(),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] minOut2:',
+        decoded[7].toString(),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] minProfit:',
+        decoded[8].toString(),
+      )
+      console.log(
+        '[OPERATION 3 ENCODING TEST] PASSED',
+      )
+      console.log('========================================')
     };
 }
