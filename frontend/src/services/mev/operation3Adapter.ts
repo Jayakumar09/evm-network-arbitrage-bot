@@ -39,6 +39,44 @@ function encodeDexSelector(dex: MevDex): number {
 }
 
 // ======================================================
+// Create Operation 3 Execution Data
+// ======================================================
+//
+// Builds the explicit execution-data model required by
+// Executor Operation 3.
+//
+// IMPORTANT:
+// This function ONLY constructs frontend data.
+// It does NOT encode calldata.
+// It does NOT access RPC/wallet.
+// It does NOT execute a transaction.
+// ======================================================
+
+export function createOperation3ExecutionData(
+  dex1: MevDex,
+  dex2: MevDex,
+  tokenIn: string,
+  tokenOut: string,
+  uniFee1: number,
+  uniFee2: number,
+  minOut1: bigint,
+  minOut2: bigint,
+  minProfit: bigint,
+): Operation3ExecutionData {
+  return {
+    dex1,
+    dex2,
+    tokenIn,
+    tokenOut,
+    uniFee1,
+    uniFee2,
+    minOut1,
+    minOut2,
+    minProfit,
+  };
+}
+
+// ======================================================
 // Encode Operation 3 Execution Data
 // ======================================================
 

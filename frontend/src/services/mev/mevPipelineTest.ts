@@ -1,6 +1,9 @@
 import { AbiCoder } from "ethers";
 import { encodeMevBackrunParams } from '../blockchain'
-import { encodeOperation3ExecutionData } from "./operation3Adapter";
+import {
+  createOperation3ExecutionData,
+  encodeOperation3ExecutionData,
+} from "./operation3Adapter";
 import { BlockMonitor } from "./blockMonitor";
 import { TransactionMonitor } from "./transactionMonitor";
 import { OpportunityDetector } from "./opportunityDetector";
@@ -2970,6 +2973,119 @@ if (import.meta.env.DEV) {
       )
       console.log('========================================')
     };
+
+    // ====================================================
+// STAGE 2.26.12 - OPERATION 3 EXECUTION DATA TEST
+// ====================================================
+//
+// Verifies that explicit Operation 3 route parameters
+// are correctly constructed into Operation3ExecutionData.
+//
+// This test ONLY constructs frontend data.
+// It does NOT encode calldata.
+// It does NOT send a transaction.
+// It does NOT access a wallet.
+// ====================================================
+
+(window as any).testOperation3ExecutionData =
+  (): void => {
+    console.log("========================================");
+    console.log(
+      "[OPERATION 3 EXECUTION DATA TEST] START",
+    );
+    console.log("========================================");
+
+    const tokenIn =
+      "0x1111111111111111111111111111111111111111";
+
+    const tokenOut =
+      "0x2222222222222222222222222222222222222222";
+
+    const executionData =
+      createOperation3ExecutionData(
+        "V3",
+        "V2",
+        tokenIn,
+        tokenOut,
+        3000,
+        0,
+        900000n,
+        1000000n,
+        10000n,
+      );
+
+    if (executionData.dex1 !== "V3") {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] dex1 mismatch",
+      );
+    }
+
+    if (executionData.dex2 !== "V2") {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] dex2 mismatch",
+      );
+    }
+
+    if (
+      executionData.tokenIn.toLowerCase() !==
+      tokenIn.toLowerCase()
+    ) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] tokenIn mismatch",
+      );
+    }
+
+    if (
+      executionData.tokenOut.toLowerCase() !==
+      tokenOut.toLowerCase()
+    ) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] tokenOut mismatch",
+      );
+    }
+
+    if (executionData.uniFee1 !== 3000) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] uniFee1 mismatch",
+      );
+    }
+
+    if (executionData.uniFee2 !== 0) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] uniFee2 mismatch",
+      );
+    }
+
+    if (executionData.minOut1 !== 900000n) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] minOut1 mismatch",
+      );
+    }
+
+    if (executionData.minOut2 !== 1000000n) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] minOut2 mismatch",
+      );
+    }
+
+    if (executionData.minProfit !== 10000n) {
+      throw new Error(
+        "[OPERATION 3 EXECUTION DATA TEST] minProfit mismatch",
+      );
+    }
+
+    console.log(
+      "[OPERATION 3 EXECUTION DATA TEST] ALL FIELDS: PASSED",
+    );
+
+    console.log(
+      "[OPERATION 3 EXECUTION DATA TEST] PASSED",
+    );
+
+    console.log("========================================");
+  };
+
+
 
     // ====================================================
     // STAGE 2.26.11 - OPERATION 3 ADAPTER TEST
