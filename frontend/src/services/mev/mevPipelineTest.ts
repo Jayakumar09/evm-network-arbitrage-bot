@@ -896,6 +896,28 @@ if (import.meta.env.DEV) {
           );
         }
 
+        if (
+          candidate.amountOutMin !==
+          amountOutMin
+        ) {
+          throw new Error(
+            "Candidate amountOutMin does not match test amountOutMin.",
+          );
+        }
+
+        if (
+          !candidate.path ||
+          candidate.path.length !== 2 ||
+          candidate.path[0].toLowerCase() !==
+            SEPOLIA_USDC.toLowerCase() ||
+          candidate.path[1].toLowerCase() !==
+            SEPOLIA_WETH.toLowerCase()
+        ) {
+          throw new Error(
+            "Candidate V2 path does not match expected USDC -> WETH path.",
+          );
+        }
+
         console.log(
           "[MEV PIPELINE E2E TEST] " +
             "V2 calldata decoding PASSED.",
@@ -1043,6 +1065,32 @@ if (import.meta.env.DEV) {
         ) {
           throw new Error(
             "Trigger simulation does not match live V2 quote.",
+          );
+        }
+
+        if (
+          candidate.amountOutMin !==
+          undefined &&
+          triggerSimulation.amountOut <
+            candidate.amountOutMin
+        ) {
+          throw new Error(
+            "Trigger simulation output is below candidate amountOutMin.",
+          );
+        }
+
+        if (
+          !candidate.path ||
+          candidate.path.length < 2 ||
+          candidate.path[0].toLowerCase() !==
+            candidate.tokenIn!.toLowerCase() ||
+          candidate.path[
+            candidate.path.length - 1
+          ].toLowerCase() !==
+            candidate.tokenOut!.toLowerCase()
+        ) {
+          throw new Error(
+            "Trigger simulation candidate path is invalid.",
           );
         }
 

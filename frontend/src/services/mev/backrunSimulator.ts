@@ -246,6 +246,33 @@ export class BackrunSimulator {
         );
       }
 
+      if (
+        candidate.amountOutMin !== undefined &&
+        triggerSimulation.amountOut <
+          candidate.amountOutMin
+      ) {
+        throw new Error(
+          "Trigger simulation amountOut is below candidate amountOutMin",
+        );
+      }
+
+      if (
+        candidate.path !== undefined &&
+        (
+          candidate.path.length < 2 ||
+          candidate.path[0].toLowerCase() !==
+            candidate.tokenIn.toLowerCase() ||
+          candidate.path[
+            candidate.path.length - 1
+          ].toLowerCase() !==
+            candidate.tokenOut.toLowerCase()
+        )
+      ) {
+        throw new Error(
+          "V2 candidate path does not match tokenIn/tokenOut",
+        );
+      }
+
       /*
        * --------------------------------------------------
        * STEP 4

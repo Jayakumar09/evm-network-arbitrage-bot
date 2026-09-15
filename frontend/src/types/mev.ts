@@ -34,6 +34,10 @@ export interface BackrunCandidate {
   amountIn?: bigint;
   expectedAmountOut?: bigint;
 
+  // V2 trigger execution constraints
+  amountOutMin?: bigint;
+  path?: string[];
+
   // Future backrun execution data
   backrunDex?: MevDex;
   backrunTokenIn?: string;
@@ -51,8 +55,6 @@ export interface BackrunCandidate {
 
   detectedAt: number;
 }
-
-
 
 // ======================================================
 // Paper Execution

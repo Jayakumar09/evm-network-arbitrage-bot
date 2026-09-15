@@ -98,6 +98,12 @@ export class OpportunityDetector {
         amountIn:
           decoded.amountIn,
 
+        amountOutMin:
+          decoded.amountOutMin,
+
+        path:
+          decoded.path,
+
         description:
           this.createDescription(
             transaction,
@@ -373,14 +379,22 @@ if (import.meta.env.DEV) {
         return;
       }
 
-      if (
-        candidate.tokenIn?.toLowerCase() !==
-          tokenIn.toLowerCase() ||
-        candidate.tokenOut?.toLowerCase() !==
-          tokenOut.toLowerCase() ||
-        candidate.amountIn !==
-          amountIn
-      ) {
+       if (
+          candidate.tokenIn?.toLowerCase() !==
+            tokenIn.toLowerCase() ||
+          candidate.tokenOut?.toLowerCase() !==
+            tokenOut.toLowerCase() ||
+          candidate.amountIn !==
+            amountIn ||
+          candidate.amountOutMin !==
+            amountOutMin ||
+          candidate.path?.length !==
+            2 ||
+          candidate.path?.[0].toLowerCase() !==
+            tokenIn.toLowerCase() ||
+          candidate.path?.[1].toLowerCase() !==
+            tokenOut.toLowerCase()
+        ) {
         console.error(
           "[MEV OPPORTUNITY DETECTOR TEST] FAILED: " +
             "Decoded V2 fields were not propagated.",
