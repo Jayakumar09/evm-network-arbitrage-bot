@@ -1,5 +1,6 @@
 import { AbiCoder } from "ethers";
 import { encodeMevBackrunParams } from '../blockchain'
+import { encodeOperation3ExecutionData } from "./operation3Adapter";
 import { BlockMonitor } from "./blockMonitor";
 import { TransactionMonitor } from "./transactionMonitor";
 import { OpportunityDetector } from "./opportunityDetector";
@@ -2969,4 +2970,162 @@ if (import.meta.env.DEV) {
       )
       console.log('========================================')
     };
+
+    // ====================================================
+    // STAGE 2.26.11 - OPERATION 3 ADAPTER TEST
+    // ====================================================
+    // Verifies the frontend DEX representation is correctly
+    // converted into the numeric Solidity Operation 3 selectors.
+    //
+    // This test ONLY encodes/decodes calldata.
+    // It does NOT send a transaction.
+    // ====================================================
+
+    (window as any).testOperation3Adapter =
+      (): void => {
+        console.log('========================================')
+        console.log('[OPERATION 3 ADAPTER TEST] START')
+        console.log('========================================')
+
+        const tokenIn =
+          '0x1111111111111111111111111111111111111111'
+
+        const tokenOut =
+          '0x2222222222222222222222222222222222222222'
+
+        const executionData = {
+          dex1: "V3" as const,
+          dex2: "V2" as const,
+          tokenIn,
+          tokenOut,
+          uniFee1: 3000,
+          uniFee2: 0,
+          minOut1: 900000n,
+          minOut2: 1000000n,
+          minProfit: 10000n,
+        }
+
+        const params =
+          encodeOperation3ExecutionData(
+            executionData,
+          )
+
+        if (!params.startsWith('0x')) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] Encoded params must start with 0x',
+          )
+        }
+
+        const abiCoder =
+          AbiCoder.defaultAbiCoder()
+
+        const [
+          operationType,
+          operationData,
+        ] =
+          abiCoder.decode(
+            ['uint8', 'bytes'],
+            params,
+          )
+
+        if (Number(operationType) !== 3) {
+          throw new Error(
+            `[OPERATION 3 ADAPTER TEST] Expected operationType 3, got ${operationType}`,
+          )
+        }
+
+        const decoded =
+          abiCoder.decode(
+            [
+              'uint8',
+              'uint8',
+              'address',
+              'address',
+              'uint24',
+              'uint24',
+              'uint256',
+              'uint256',
+              'uint256',
+            ],
+            operationData,
+          )
+
+        if (Number(decoded[0]) !== 0) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] V3 dex1 must map to selector 0',
+          )
+        }
+
+        if (Number(decoded[1]) !== 1) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] V2 dex2 must map to selector 1',
+          )
+        }
+
+        if (
+          decoded[2].toLowerCase() !==
+          tokenIn.toLowerCase()
+        ) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] tokenIn mismatch',
+          )
+        }
+
+        if (
+          decoded[3].toLowerCase() !==
+          tokenOut.toLowerCase()
+        ) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] tokenOut mismatch',
+          )
+        }
+
+        if (Number(decoded[4]) !== 3000) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] uniFee1 mismatch',
+          )
+        }
+
+        if (Number(decoded[5]) !== 0) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] uniFee2 mismatch',
+          )
+        }
+
+        if (decoded[6] !== 900000n) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] minOut1 mismatch',
+          )
+        }
+
+        if (decoded[7] !== 1000000n) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] minOut2 mismatch',
+          )
+        }
+
+        if (decoded[8] !== 10000n) {
+          throw new Error(
+            '[OPERATION 3 ADAPTER TEST] minProfit mismatch',
+          )
+        }
+
+        console.log(
+          '[OPERATION 3 ADAPTER TEST] V3 -> 0: PASSED',
+        )
+
+        console.log(
+          '[OPERATION 3 ADAPTER TEST] V2 -> 1: PASSED',
+        )
+
+        console.log(
+          '[OPERATION 3 ADAPTER TEST] ALL FIELDS: PASSED',
+        )
+
+        console.log(
+          '[OPERATION 3 ADAPTER TEST] PASSED',
+        )
+
+        console.log('========================================')
+      }
 }

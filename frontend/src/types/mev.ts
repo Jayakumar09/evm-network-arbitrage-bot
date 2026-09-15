@@ -24,6 +24,34 @@ export interface TransactionMonitorOptions {
 
 export type MevDex = "V2" | "V3";
 
+// ======================================================
+// Executor Operation 3
+// ======================================================
+//
+// Represents the exact execution parameters required by
+// the deployed Executor MEV backrun operation.
+//
+// IMPORTANT:
+// This is execution-data modeling only.
+// It does not execute a blockchain transaction.
+// ======================================================
+
+export interface Operation3ExecutionData {
+  dex1: MevDex;
+  dex2: MevDex;
+
+  tokenIn: string;
+  tokenOut: string;
+
+  uniFee1: number;
+  uniFee2: number;
+
+  minOut1: bigint;
+  minOut2: bigint;
+
+  minProfit: bigint;
+}
+
 export interface BackrunCandidate {
   triggerTransactionHash: string;
   blockNumber: number;
