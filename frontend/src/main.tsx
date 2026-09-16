@@ -16,6 +16,7 @@ import "./services/mev/mevV2Quote";
 import "./services/mev/v2PairState";
 import "./services/mev/v2StateSimulator";
 import "./services/mev/mevGasEstimator";
+import "./services/mev/v3SdkImportTest";
 
 
 import App from './App.tsx'
