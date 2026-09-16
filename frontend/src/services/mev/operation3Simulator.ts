@@ -1,4 +1,5 @@
 import {
+  Contract,
   type Provider,
 } from "ethers";
 
@@ -16,6 +17,70 @@ import {
 import {
   simulateV2Swap,
 } from "./v2StateSimulator";
+
+import {
+  simulateV3Swap,
+  simulateV3SwapWithPool,
+} from "./v3StateSimulator";
+
+import {
+  WETH_ADDRESS,
+} from "../../config/contracts";
+
+// ======================================================
+// ERC20 TOKEN DECIMALS
+// ======================================================
+//
+// Read-only token metadata lookup.
+//
+// Required by the Uniswap V3 SDK because Token objects
+// require token decimal precision.
+//
+// IMPORTANT:
+// - No transaction
+// - No wallet
+// - No signing
+// - No blockchain state modification
+// ======================================================
+
+const ERC20_DECIMALS_ABI = [
+  "function decimals() view returns (uint8)",
+];
+
+async function getTokenDecimals(
+  provider: Provider,
+  tokenAddress: string,
+): Promise<number> {
+  if (!tokenAddress) {
+    throw new Error(
+      "[OPERATION 3 SIMULATOR] Token address is required for decimals.",
+    );
+  }
+
+  const token =
+    new Contract(
+      tokenAddress,
+      ERC20_DECIMALS_ABI,
+      provider,
+    );
+
+  const decimals =
+    await token.decimals();
+
+  const result =
+    Number(decimals);
+
+  if (
+    !Number.isInteger(result) ||
+    result < 0
+  ) {
+    throw new Error(
+      "[OPERATION 3 SIMULATOR] Invalid token decimals.",
+    );
+  }
+
+  return result;
+}
 
 // ======================================================
 // OPERATION 3 REPAYMENT REQUIREMENT
@@ -134,11 +199,11 @@ export async function getOperation3V2PairState(
 //
 // Flow:
 //   V2PairState
-//       ↓
+//       â†“
 //   simulateV2Swap()
-//       ↓
+//       â†“
 //   expected amountOut
-//       ↓
+//       â†“
 //   Operation 3 minOut validation
 //
 // IMPORTANT:
@@ -249,15 +314,15 @@ export function simulateOperation3V2Leg(
 // Route:
 //
 // flashLoanAmount
-//       ↓
+//       â†“
 //     Leg 1
-//       ↓
+//       â†“
 //    amountOut1
-//       ↓
+//       â†“
 //     Leg 2
-//       ↓
+//       â†“
 //    amountOut2
-//       ↓
+//       â†“
 // final tokenIn balance
 //
 // IMPORTANT:
@@ -357,25 +422,30 @@ export function simulateOperation3TwoLegs(
 //
 // Dedicated simulation boundary for Executor Operation 3.
 //
-// IMPORTANT:
-// This stage only validates the Operation 3 request.
-// Actual V3/V2 pool-state simulation will be added later.
+// Supported routes:
+// - V2 -> V2
+// - V2 -> V3
+// - V3 -> V2
 //
-// This simulator:
-// - does NOT send transactions
-// - does NOT call Executor write methods
-// - does NOT access a wallet
-// - does NOT modify blockchain state
-// - does NOT replace BackrunSimulator
+// V3 -> V3 remains intentionally deferred.
+//
+// IMPORTANT:
+// - Read-only simulation only.
+// - No transaction is sent.
+// - No wallet signing.
+// - No Executor write method is called.
+// - No blockchain state is modified.
 // ======================================================
 
 export class Operation3Simulator {
-    /**
+  /**
    * Simulate an Operation 3 route.
    *
-   * Stage 2.26.15:
+   * Stage 2.26.15+:
    * - V2 -> V2 simulation is supported.
-   * - V3 route simulation is intentionally deferred.
+   * - V2 -> V3 simulation is supported.
+   * - V3 -> V2 simulation is supported.
+   * - V3 -> V3 simulation remains intentionally deferred.
    *
    * READ-ONLY:
    * - No transaction is sent.
@@ -513,148 +583,476 @@ export class Operation3Simulator {
         );
       }
 
-      // ==================================================
-      // STAGE 2.26.15
-      // V2 -> V2 ROUTE SIMULATION ONLY
-      // ==================================================
-      //
-      // V3 route simulation is intentionally deferred.
-      //
-      // The current Operation 3 execution model uses the
-      // same V2 pair for both legs because executionData
-      // contains tokenIn/tokenOut but no separate pair
-      // addresses.
-      // ==================================================
-
-      if (
-        executionData.dex1 !== "V2" ||
-        executionData.dex2 !== "V2"
-      ) {
-        throw new Error(
-          "Operation 3 V3 route simulation is not implemented yet.",
-        );
-      }
-
-      // ==================================================
-      // LOAD CURRENT V2 PAIR STATE
-      // ==================================================
-
       const { getProvider } =
         await import("../blockchain");
 
       const provider =
         await getProvider();
 
-      const pairState =
-        await getOperation3V2PairState(
-          provider,
-          executionData.tokenIn,
-          executionData.tokenOut,
-        );
-
       // ==================================================
-      // LEG 1
+      // V2 -> V2
       //
-      // tokenIn -> tokenOut
+      // Existing stateful V2 simulation.
       // ==================================================
 
-      const leg1Simulation =
-        simulateV2Swap(
-          pairState,
-          executionData.tokenIn,
-          executionData.tokenOut,
-          flashLoanAmount,
-        );
+      if (
+        executionData.dex1 === "V2" &&
+        executionData.dex2 === "V2"
+      ) {
+        const pairState =
+          await getOperation3V2PairState(
+            provider,
+            executionData.tokenIn,
+            executionData.tokenOut,
+          );
 
-      const leg1 =
-        validateOperation3LegOutput(
-          "V2",
-          executionData.tokenIn,
-          executionData.tokenOut,
-          leg1Simulation.amountIn,
-          leg1Simulation.amountOut,
-          executionData.minOut1,
-        );
+        const leg1Simulation =
+          simulateV2Swap(
+            pairState,
+            executionData.tokenIn,
+            executionData.tokenOut,
+            flashLoanAmount,
+          );
 
-      if (!leg1.success) {
-        return {
-          success: false,
-          executionData,
-          expectedProfit: 0n,
-          gasCost: 0n,
-          netProfit: 0n,
-          profitable: false,
-          error:
-            leg1.error ??
-            "Operation 3 V2 leg 1 simulation failed.",
+        const leg1 =
+          validateOperation3LegOutput(
+            "V2",
+            executionData.tokenIn,
+            executionData.tokenOut,
+            leg1Simulation.amountIn,
+            leg1Simulation.amountOut,
+            executionData.minOut1,
+          );
+
+        if (!leg1.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg1.error ??
+              "Operation 3 V2 leg 1 simulation failed.",
+          };
+        }
+
+        const postLeg1PairState: V2PairState = {
+          ...pairState,
+          reserve0:
+            leg1Simulation.newReserve0,
+          reserve1:
+            leg1Simulation.newReserve1,
         };
+
+        const leg2Simulation =
+          simulateV2Swap(
+            postLeg1PairState,
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg1Simulation.amountOut,
+          );
+
+        const leg2 =
+          validateOperation3LegOutput(
+            "V2",
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg2Simulation.amountIn,
+            leg2Simulation.amountOut,
+            executionData.minOut2,
+          );
+
+        if (!leg2.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg2.error ??
+              "Operation 3 V2 leg 2 simulation failed.",
+          };
+        }
+
+        return simulateOperation3TwoLegs(
+          request,
+          leg1Simulation.amountOut,
+          leg2Simulation.amountOut,
+        );
       }
 
       // ==================================================
-      // POST-LEG-1 PAIR STATE
+      // V2 -> V3
       //
-      // Leg 1 changes the V2 reserves.
+      // V2 leg 1:
+      // tokenIn -> tokenOut
       //
-      // Use the exact reserves returned by the Leg 1
-      // simulation. Do NOT simulate Leg 1 again.
+      // V3 leg 2:
+      // tokenOut -> tokenIn
       // ==================================================
 
-      const postLeg1PairState: V2PairState = {
-        ...pairState,
-        reserve0:
-          leg1Simulation.newReserve0,
-        reserve1:
-          leg1Simulation.newReserve1,
-      };
+      if (
+        executionData.dex1 === "V2" &&
+        executionData.dex2 === "V3"
+      ) {
+        const pairState =
+          await getOperation3V2PairState(
+            provider,
+            executionData.tokenIn,
+            executionData.tokenOut,
+          );
+
+        const leg1Simulation =
+          simulateV2Swap(
+            pairState,
+            executionData.tokenIn,
+            executionData.tokenOut,
+            flashLoanAmount,
+          );
+
+        const leg1 =
+          validateOperation3LegOutput(
+            "V2",
+            executionData.tokenIn,
+            executionData.tokenOut,
+            leg1Simulation.amountIn,
+            leg1Simulation.amountOut,
+            executionData.minOut1,
+          );
+
+        if (!leg1.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg1.error ??
+              "Operation 3 V2 leg 1 simulation failed.",
+          };
+        }
+
+        const tokenInDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenIn,
+          );
+
+        const tokenOutDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenOut,
+          );
+
+        const leg2Simulation =
+          await simulateV3Swap(
+            provider,
+            executionData.tokenOut,
+            executionData.tokenIn,
+            tokenOutDecimals,
+            tokenInDecimals,
+            leg1Simulation.amountOut,
+            executionData.uniFee2,
+          );
+
+        const leg2 =
+          validateOperation3LegOutput(
+            "V3",
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg1Simulation.amountOut,
+            leg2Simulation.amountOut,
+            executionData.minOut2,
+          );
+
+        if (!leg2.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg2.error ??
+              "Operation 3 V3 leg 2 simulation failed.",
+          };
+        }
+
+        return simulateOperation3TwoLegs(
+          request,
+          leg1Simulation.amountOut,
+          leg2Simulation.amountOut,
+        );
+      }
 
       // ==================================================
-      // LEG 2
+      // V3 -> V2
       //
+      // V3 leg 1:
+      // tokenIn -> tokenOut
+      //
+      // V2 leg 2:
       // tokenOut -> tokenIn
       //
-      // Uses the post-Leg-1 pair state.
+      // The two legs use different pools, so the V3
+      // simulation does not modify the V2 pair state.
       // ==================================================
 
-      const leg2Simulation =
-        simulateV2Swap(
-          postLeg1PairState,
-          executionData.tokenOut,
-          executionData.tokenIn,
+      if (
+        executionData.dex1 === "V3" &&
+        executionData.dex2 === "V2"
+      ) {
+        const tokenInDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenIn,
+          );
+
+        const tokenOutDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenOut,
+          );
+
+        const leg1Simulation =
+          await simulateV3Swap(
+            provider,
+            executionData.tokenIn,
+            executionData.tokenOut,
+            tokenInDecimals,
+            tokenOutDecimals,
+            flashLoanAmount,
+            executionData.uniFee1,
+          );
+
+        const leg1 =
+          validateOperation3LegOutput(
+            "V3",
+            executionData.tokenIn,
+            executionData.tokenOut,
+            flashLoanAmount,
+            leg1Simulation.amountOut,
+            executionData.minOut1,
+          );
+
+        if (!leg1.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg1.error ??
+              "Operation 3 V3 leg 1 simulation failed.",
+          };
+        }
+
+        const pairState =
+          await getOperation3V2PairState(
+            provider,
+            executionData.tokenOut,
+            executionData.tokenIn,
+          );
+
+        const leg2Simulation =
+          simulateV2Swap(
+            pairState,
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg1Simulation.amountOut,
+          );
+
+        const leg2 =
+          validateOperation3LegOutput(
+            "V2",
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg2Simulation.amountIn,
+            leg2Simulation.amountOut,
+            executionData.minOut2,
+          );
+
+        if (!leg2.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg2.error ??
+              "Operation 3 V2 leg 2 simulation failed.",
+          };
+        }
+
+        return simulateOperation3TwoLegs(
+          request,
           leg1Simulation.amountOut,
-        );
-
-      const leg2 =
-        validateOperation3LegOutput(
-          "V2",
-          executionData.tokenOut,
-          executionData.tokenIn,
-          leg2Simulation.amountIn,
           leg2Simulation.amountOut,
-          executionData.minOut2,
         );
-
-      if (!leg2.success) {
-        return {
-          success: false,
-          executionData,
-          expectedProfit: 0n,
-          gasCost: 0n,
-          netProfit: 0n,
-          profitable: false,
-          error:
-            leg2.error ??
-            "Operation 3 V2 leg 2 simulation failed.",
-        };
       }
 
       // ==================================================
-      // FINAL OPERATION 3 RESULT
+      // V3 -> V3
+      //
+      // V3 leg 1:
+      // tokenIn -> tokenOut
+      //
+      // V3 leg 2:
+      // tokenOut -> tokenIn
+      //
+      // IMPORTANT:
+      // - If both legs use the same fee tier, both legs use
+      //   the same V3 pool. Leg 2 MUST start from the
+      //   post-leg-1 Pool returned by the SDK.
+      //
+      // - If the fee tiers differ, the legs use different
+      //   V3 pools. Leg 2 can therefore start from its
+      //   current on-chain state.
+      //
+      // No transaction is sent.
       // ==================================================
 
-      return simulateOperation3TwoLegs(
-        request,
-        leg1Simulation.amountOut,
-        leg2Simulation.amountOut,
+      if (
+        executionData.dex1 === "V3" &&
+        executionData.dex2 === "V3"
+      ) {
+        const tokenInDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenIn,
+          );
+
+        const tokenOutDecimals =
+          await getTokenDecimals(
+            provider,
+            executionData.tokenOut,
+          );
+
+        // ================================================
+        // LEG 1 - V3
+        //
+        // tokenIn -> tokenOut
+        // ================================================
+
+        const leg1Simulation =
+          await simulateV3Swap(
+            provider,
+            executionData.tokenIn,
+            executionData.tokenOut,
+            tokenInDecimals,
+            tokenOutDecimals,
+            flashLoanAmount,
+            executionData.uniFee1,
+          );
+
+        const leg1 =
+          validateOperation3LegOutput(
+            "V3",
+            executionData.tokenIn,
+            executionData.tokenOut,
+            flashLoanAmount,
+            leg1Simulation.amountOut,
+            executionData.minOut1,
+          );
+
+        if (!leg1.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg1.error ??
+              "Operation 3 V3 leg 1 simulation failed.",
+          };
+        }
+
+        // ================================================
+        // LEG 2 - V3
+        //
+        // tokenOut -> tokenIn
+        // ================================================
+
+        let leg2Simulation;
+
+        if (
+          executionData.uniFee1 ===
+          executionData.uniFee2
+        ) {
+          // Same token pair + same fee tier means the
+          // factory resolves to the same V3 pool.
+          //
+          // Reuse the post-leg-1 SDK Pool so the second
+          // swap starts from the simulated post-trade state.
+          leg2Simulation =
+            await simulateV3SwapWithPool(
+              leg1Simulation.updatedPool,
+              leg1Simulation.poolAddress,
+              executionData.tokenOut,
+              executionData.tokenIn,
+              leg1Simulation.amountOut,
+            );
+        } else {
+          // Different fee tiers mean different V3 pools.
+          // Build leg 2 from its current on-chain state.
+          leg2Simulation =
+            await simulateV3Swap(
+              provider,
+              executionData.tokenOut,
+              executionData.tokenIn,
+              tokenOutDecimals,
+              tokenInDecimals,
+              leg1Simulation.amountOut,
+              executionData.uniFee2,
+            );
+        }
+
+        const leg2 =
+          validateOperation3LegOutput(
+            "V3",
+            executionData.tokenOut,
+            executionData.tokenIn,
+            leg1Simulation.amountOut,
+            leg2Simulation.amountOut,
+            executionData.minOut2,
+          );
+
+        if (!leg2.success) {
+          return {
+            success: false,
+            executionData,
+            expectedProfit: 0n,
+            gasCost: 0n,
+            netProfit: 0n,
+            profitable: false,
+            error:
+              leg2.error ??
+              "Operation 3 V3 leg 2 simulation failed.",
+          };
+        }
+
+        return simulateOperation3TwoLegs(
+          request,
+          leg1Simulation.amountOut,
+          leg2Simulation.amountOut,
+        );
+      }
+
+      throw new Error(
+        "Operation 3 route simulation is not implemented.",
       );
     } catch (error) {
       return {
@@ -742,6 +1140,338 @@ if (import.meta.env.DEV) {
 
       console.log(
         "[OPERATION 3 V2->V2 TEST] PASS",
+      );
+
+      return result;
+    };
+}
+
+// ======================================================
+// DEV: OPERATION 3 V2 -> V3 RUNTIME TEST
+// ======================================================
+
+if (import.meta.env.DEV) {
+  (window as any).testOperation3V2V3Simulation =
+    async () => {
+      console.log(
+        "[OPERATION 3 V2->V3 TEST] Starting",
+      );
+
+      const tokenIn =
+        "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8";
+
+      const tokenOut =
+        WETH_ADDRESS;
+
+      const flashLoanAmount =
+        1000000n;
+
+      const flashLoanPremium =
+        0n;
+
+      const executionData = {
+        dex1: "V2" as const,
+        dex2: "V3" as const,
+
+        tokenIn,
+        tokenOut,
+
+        uniFee1: 0,
+        uniFee2: 3000,
+
+        minOut1: 1n,
+        minOut2: 1n,
+
+        minProfit: 0n,
+      };
+
+      const simulator =
+        new Operation3Simulator();
+
+      const result =
+        await simulator.simulate({
+          executionData,
+
+          flashLoanAsset:
+            tokenIn,
+
+          flashLoanAmount,
+
+          flashLoanPremium,
+        });
+
+      console.log(
+        "[OPERATION 3 V2->V3 TEST] Result:",
+        {
+          ...result,
+
+          expectedProfit:
+            result.expectedProfit.toString(),
+
+          gasCost:
+            result.gasCost.toString(),
+
+          netProfit:
+            result.netProfit.toString(),
+        },
+      );
+
+      if (!result.success) {
+        throw new Error(
+          result.error ??
+          "Operation 3 V2->V3 simulation failed.",
+        );
+      }
+
+      if (!result.executionData) {
+        throw new Error(
+          "Operation 3 V2->V3 simulation did not return execution data.",
+        );
+      }
+
+      if (
+        result.executionData.dex1 !== "V2" ||
+        result.executionData.dex2 !== "V3"
+      ) {
+        throw new Error(
+          "Operation 3 V2->V3 execution data route is incorrect.",
+        );
+      }
+
+      if (
+        result.executionData.uniFee2 !== 3000
+      ) {
+        throw new Error(
+          "Operation 3 V2->V3 V3 fee is incorrect.",
+        );
+      }
+
+      console.log(
+        "[OPERATION 3 V2->V3 TEST] PASS",
+      );
+
+      return result;
+    };
+}
+
+// ======================================================
+// DEV: OPERATION 3 V3 -> V2 RUNTIME TEST
+// ======================================================
+
+if (import.meta.env.DEV) {
+  (window as any).testOperation3V3V2Simulation =
+    async () => {
+      console.log(
+        "[OPERATION 3 V3->V2 TEST] Starting",
+      );
+
+      const tokenIn =
+        "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8";
+
+      const tokenOut =
+        WETH_ADDRESS;
+
+      const flashLoanAmount =
+        1000000n;
+
+      const flashLoanPremium =
+        0n;
+
+      const executionData = {
+        dex1: "V3" as const,
+        dex2: "V2" as const,
+
+        tokenIn,
+        tokenOut,
+
+        uniFee1: 3000,
+        uniFee2: 0,
+
+        minOut1: 1n,
+        minOut2: 1n,
+
+        minProfit: 0n,
+      };
+
+      const simulator =
+        new Operation3Simulator();
+
+      const result =
+        await simulator.simulate({
+          executionData,
+
+          flashLoanAsset:
+            tokenIn,
+
+          flashLoanAmount,
+
+          flashLoanPremium,
+        });
+
+      console.log(
+        "[OPERATION 3 V3->V2 TEST] Result:",
+        {
+          ...result,
+
+          expectedProfit:
+            result.expectedProfit.toString(),
+
+          gasCost:
+            result.gasCost.toString(),
+
+          netProfit:
+            result.netProfit.toString(),
+        },
+      );
+
+      if (!result.success) {
+        throw new Error(
+          result.error ??
+          "Operation 3 V3->V2 simulation failed.",
+        );
+      }
+
+      if (!result.executionData) {
+        throw new Error(
+          "Operation 3 V3->V2 simulation did not return execution data.",
+        );
+      }
+
+      if (
+        result.executionData.dex1 !== "V3" ||
+        result.executionData.dex2 !== "V2"
+      ) {
+        throw new Error(
+          "Operation 3 V3->V2 execution data route is incorrect.",
+        );
+      }
+
+      if (
+        result.executionData.uniFee1 !== 3000
+      ) {
+        throw new Error(
+          "Operation 3 V3->V2 V3 fee is incorrect.",
+        );
+      }
+
+      console.log(
+        "[OPERATION 3 V3->V2 TEST] PASS",
+      );
+
+      return result;
+    };
+}
+
+
+// ======================================================
+// DEV: OPERATION 3 V3 -> V3 RUNTIME TEST
+// ======================================================
+//
+// Uses the same Sepolia V3 pool for both legs.
+//
+// This specifically verifies that the second V3 leg
+// reuses the post-first-leg Pool state.
+// ======================================================
+
+if (import.meta.env.DEV) {
+  (window as any).testOperation3V3V3Simulation =
+    async () => {
+      console.log(
+        "[OPERATION 3 V3->V3 TEST] Starting",
+      );
+
+      const tokenIn =
+        "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8";
+
+      const tokenOut =
+        WETH_ADDRESS;
+
+      const flashLoanAmount =
+        1000000n;
+
+      const flashLoanPremium =
+        0n;
+
+      const executionData = {
+        dex1: "V3" as const,
+        dex2: "V3" as const,
+
+        tokenIn,
+        tokenOut,
+
+        uniFee1: 3000,
+        uniFee2: 3000,
+
+        minOut1: 1n,
+        minOut2: 1n,
+
+        minProfit: 0n,
+      };
+
+      const simulator =
+        new Operation3Simulator();
+
+      const result =
+        await simulator.simulate({
+          executionData,
+
+          flashLoanAsset:
+            tokenIn,
+
+          flashLoanAmount,
+
+          flashLoanPremium,
+        });
+
+      console.log(
+        "[OPERATION 3 V3->V3 TEST] Result:",
+        {
+          ...result,
+
+          expectedProfit:
+            result.expectedProfit.toString(),
+
+          gasCost:
+            result.gasCost.toString(),
+
+          netProfit:
+            result.netProfit.toString(),
+        },
+      );
+
+      if (!result.success) {
+        throw new Error(
+          result.error ??
+          "Operation 3 V3->V3 simulation failed.",
+        );
+      }
+
+      if (!result.executionData) {
+        throw new Error(
+          "Operation 3 V3->V3 simulation did not return execution data.",
+        );
+      }
+
+      if (
+        result.executionData.dex1 !== "V3" ||
+        result.executionData.dex2 !== "V3"
+      ) {
+        throw new Error(
+          "Operation 3 V3->V3 execution data route is incorrect.",
+        );
+      }
+
+      if (
+        result.executionData.uniFee1 !== 3000 ||
+        result.executionData.uniFee2 !== 3000
+      ) {
+        throw new Error(
+          "Operation 3 V3->V3 fee configuration is incorrect.",
+        );
+      }
+
+      console.log(
+        "[OPERATION 3 V3->V3 TEST] PASS",
       );
 
       return result;
