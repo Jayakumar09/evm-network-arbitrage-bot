@@ -196,6 +196,10 @@ function PaperExecutionHistory() {
               </th>
 
               <th className="px-6 py-4 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Operation 3
+              </th>
+
+              <th className="px-6 py-4 text-xs font-medium uppercase tracking-wide text-slate-400">
                 Amount In
               </th>
 
@@ -296,6 +300,45 @@ function PaperExecutionHistory() {
                         {execution.backrunExpectedAmountOut.toString()}
                       </span>
                     </p>
+                  </td>
+
+                  <td className="px-6 py-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400">
+                      {execution.operation3SimulationResult
+                        ? "OPERATION 3"
+                        : "—"}
+                    </p>
+
+                    {execution.operation3SimulationResult && (
+                      <>
+                        <p className="mt-1 text-xs text-slate-300">
+                          {
+                            execution.operation3SimulationResult
+                              .executionData?.dex1
+                          }
+                          {" → "}
+                          {
+                            execution.operation3SimulationResult
+                              .executionData?.dex2
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Min Profit:{" "}
+                          {formatProfit(
+                            execution.operation3SimulationResult
+                              .executionData?.minProfit,
+                          )}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Net:{" "}
+                          {formatProfit(
+                            execution.operation3SimulationResult.netProfit,
+                          )}
+                        </p>
+                      </>
+                    )}
                   </td>
 
                   <td className="px-6 py-5 font-mono text-sm text-slate-300">
@@ -446,6 +489,39 @@ function PaperExecutionHistory() {
                   <p className="mt-1 font-mono text-xs text-slate-300">
                     {execution.backrunExpectedAmountOut.toString()}
                   </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">
+                    Operation 3
+                  </p>
+
+                  {execution.operation3SimulationResult ? (
+                    <>
+                      <p className="mt-1 text-xs font-semibold uppercase text-cyan-400">
+                        {
+                          execution.operation3SimulationResult
+                            .executionData?.dex1
+                        }
+                        {" → "}
+                        {
+                          execution.operation3SimulationResult
+                            .executionData?.dex2
+                        }
+                      </p>
+
+                      <p className="mt-1 font-mono text-xs text-slate-300">
+                        Net:{" "}
+                        {formatProfit(
+                          execution.operation3SimulationResult.netProfit,
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">
+                      —
+                    </p>
+                  )}
                 </div>
 
                 <div>

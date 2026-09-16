@@ -52,6 +52,97 @@ export interface Operation3ExecutionData {
   minProfit: bigint;
 }
 
+// ======================================================
+// OPERATION 3 SIMULATION RESULT
+// ======================================================
+//
+// Represents a fully simulated Operation 3 route.
+//
+// IMPORTANT:
+// This is simulation data only.
+// It does NOT execute a transaction.
+// ======================================================
+
+export interface Operation3SimulationResult {
+  success: boolean;
+
+  executionData?: Operation3ExecutionData;
+
+  expectedProfit: bigint;
+  gasCost: bigint;
+  netProfit: bigint;
+
+  profitable: boolean;
+
+  error?: string;
+}
+
+// ======================================================
+// OPERATION 3 SIMULATION REQUEST
+// ======================================================
+//
+// Defines the complete input required by the future
+// dedicated Operation 3 simulator.
+//
+// IMPORTANT:
+// This is simulation input only.
+// It does NOT execute a transaction.
+// It does NOT submit calldata.
+// It does NOT access a wallet.
+// ======================================================
+
+export interface Operation3SimulationRequest {
+  executionData: Operation3ExecutionData;
+
+  /**
+   * Flash-loan asset.
+   *
+   * Must match executionData.tokenIn.
+   */
+  flashLoanAsset: string;
+
+  /**
+   * Flash-loan principal amount.
+   */
+  flashLoanAmount: bigint;
+
+  /**
+   * Flash-loan premium/fee used when calculating
+   * the required repayment.
+   */
+  flashLoanPremium: bigint;
+}
+
+// ======================================================
+// OPERATION 3 LEG SIMULATION RESULT
+// ======================================================
+//
+// Represents the result of simulating one leg of an
+// Operation 3 route.
+//
+// IMPORTANT:
+// This contains simulation data only.
+// It does NOT execute a swap.
+// ======================================================
+
+export interface Operation3LegSimulationResult {
+  success: boolean;
+
+  dex: MevDex;
+
+  tokenIn: string;
+  tokenOut: string;
+
+  amountIn: bigint;
+  expectedAmountOut: bigint;
+
+  minAmountOut: bigint;
+
+  amountOutValid: boolean;
+
+  error?: string;
+}
+
 export interface BackrunCandidate {
   triggerTransactionHash: string;
   blockNumber: number;
@@ -116,6 +207,9 @@ export type PaperExecutionState =
 export interface PaperExecutionPlan {
   paperExecutionId: string;
   triggerTransactionHash: string;
+
+  // Operation 3 simulation result
+  operation3SimulationResult?: Operation3SimulationResult;
 
   // Backrun execution data
   backrunDex: MevDex;
