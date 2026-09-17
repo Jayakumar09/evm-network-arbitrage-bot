@@ -3122,21 +3122,24 @@ if (import.meta.env.DEV) {
 
 (window as any).testOperation3PaperPlanPropagation =
   (): void => {
-    console.log('========================================')
+    console.log("========================================");
     console.log(
-      '[OPERATION 3 PAPER PLAN TEST] START',
-    )
-    console.log('========================================')
+      "[OPERATION 3 PAPER PLAN TEST] START",
+    );
+    console.log("========================================");
+
+    const triggerTransactionHash =
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     const operation3ExecutionData = {
       dex1: "V3" as const,
       dex2: "V2" as const,
 
       tokenIn:
-        '0x1111111111111111111111111111111111111111',
+        "0x1111111111111111111111111111111111111111",
 
       tokenOut:
-        '0x2222222222222222222222222222222222222222',
+        "0x2222222222222222222222222222222222222222",
 
       uniFee1: 3000,
       uniFee2: 0,
@@ -3145,9 +3148,10 @@ if (import.meta.env.DEV) {
       minOut2: 1000000n,
 
       minProfit: 10000n,
-    }
+    };
 
-    const operation3SimulationResult = {
+    const operation3SimulationResult:
+      Operation3SimulationResult = {
       success: true,
 
       executionData:
@@ -3158,18 +3162,40 @@ if (import.meta.env.DEV) {
       netProfit: 40000n,
 
       profitable: true,
-    }
+    };
 
-    const paperPlan = {
-      paperExecutionId:
-        'PAPER-OP3-TEST-001',
+    const candidate:
+      BackrunCandidate = {
+      triggerTransactionHash,
 
-      triggerTransactionHash:
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      blockNumber: 12345678,
 
-      operation3SimulationResult,
+      description:
+        "Operation 3 paper propagation test",
 
-      backrunDex: "V2" as const,
+      detectedAt:
+        1700000000000,
+
+      tokenIn:
+        operation3ExecutionData.tokenIn,
+
+      tokenOut:
+        operation3ExecutionData.tokenOut,
+
+      amountIn:
+        1000000n,
+
+      expectedAmountOut:
+        1100000n,
+    };
+
+    const profitablePaperSimulation:
+      BackrunSimulationResult = {
+      success: true,
+
+      triggerTransactionHash,
+
+      backrunDex: "V2",
 
       backrunTokenIn:
         operation3ExecutionData.tokenOut,
@@ -3183,186 +3209,317 @@ if (import.meta.env.DEV) {
       backrunExpectedAmountOut:
         operation3ExecutionData.minOut2,
 
-      blockNumber: 12345678,
+      expectedProfit: 100000n,
 
-      tokenIn:
-        operation3ExecutionData.tokenIn,
+      gasCost: 20000n,
 
-      tokenOut:
-        operation3ExecutionData.tokenOut,
+      netProfit: 80000n,
 
-      amountIn:
-        1000000n,
+      profitable: true,
+    };
 
-      expectedAmountOut:
-        1100000n,
+    const paperExecutionService =
+      new PaperExecutionService();
 
-      expectedProfit:
-        operation3SimulationResult.expectedProfit,
+    try {
+      // ==================================================
+      // Clear previous paper execution state
+      // ==================================================
 
-      gasCost:
-        operation3SimulationResult.gasCost,
+      paperExecutionStore.clear();
 
-      netProfit:
-        operation3SimulationResult.netProfit,
+      // ==================================================
+      // Publish deterministic FRESH opportunity
+      // ==================================================
 
-      profitable:
-        operation3SimulationResult.profitable,
+      mevOpportunityStore.setOpportunity(
+        candidate,
+        profitablePaperSimulation,
+      );
 
-      createdAt: 1700000000000,
+      const opportunity =
+        mevOpportunityStore.getState();
 
-      paperOnly: true as const,
+      if (!opportunity) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "MEV opportunity was not published.",
+        );
+      }
 
-      state: "PAPER_ACCEPTED" as const,
+      if (
+        opportunity.freshness !==
+        "FRESH"
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "MEV opportunity is not FRESH.",
+        );
+      }
+
+      if (
+        opportunity.candidate
+          .triggerTransactionHash
+          .toLowerCase() !==
+        triggerTransactionHash.toLowerCase()
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Opportunity trigger hash mismatch.",
+        );
+      }
+
+      // ==================================================
+      // CREATE PAPER PLAN THROUGH THE REAL SERVICE
+      // ==================================================
+
+      const paperExecutionResult =
+        paperExecutionService.createPlan(
+          candidate,
+          profitablePaperSimulation,
+          operation3SimulationResult,
+        );
+
+      if (!paperExecutionResult.success) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "PaperExecutionService.createPlan() failed: " +
+            (paperExecutionResult.error ??
+              "Unknown error."),
+        );
+      }
+
+      if (!paperExecutionResult.plan) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Paper execution plan was not returned.",
+        );
+      }
+
+      const paperPlan =
+        paperExecutionResult.plan;
+
+      // ==================================================
+      // Verify Operation 3 result propagation
+      // ==================================================
+
+      if (
+        paperPlan.operation3SimulationResult ===
+        undefined
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Operation 3 simulation result missing " +
+            "from PaperExecutionPlan.",
+        );
+      }
+
+      const result =
+        paperPlan.operation3SimulationResult;
+
+      if (!result.success) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Expected successful Operation 3 simulation result.",
+        );
+      }
+
+      // ==================================================
+      // Verify Operation 3 execution data
+      // ==================================================
+
+      if (
+        result.executionData?.dex1 !==
+        operation3ExecutionData.dex1
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "dex1 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.dex2 !==
+        operation3ExecutionData.dex2
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "dex2 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.tokenIn.toLowerCase() !==
+        operation3ExecutionData.tokenIn.toLowerCase()
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "tokenIn mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.tokenOut.toLowerCase() !==
+        operation3ExecutionData.tokenOut.toLowerCase()
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "tokenOut mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.uniFee1 !==
+        operation3ExecutionData.uniFee1
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "uniFee1 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.uniFee2 !==
+        operation3ExecutionData.uniFee2
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "uniFee2 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.minOut1 !==
+        operation3ExecutionData.minOut1
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "minOut1 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.minOut2 !==
+        operation3ExecutionData.minOut2
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "minOut2 mismatch.",
+        );
+      }
+
+      if (
+        result.executionData?.minProfit !==
+        operation3ExecutionData.minProfit
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "minProfit mismatch.",
+        );
+      }
+
+      // ==================================================
+      // Verify Operation 3 financial result
+      // ==================================================
+
+      if (
+        result.expectedProfit !==
+        operation3SimulationResult.expectedProfit
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "expectedProfit mismatch.",
+        );
+      }
+
+      if (
+        result.gasCost !==
+        operation3SimulationResult.gasCost
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "gasCost mismatch.",
+        );
+      }
+
+      if (
+        result.netProfit !==
+        operation3SimulationResult.netProfit
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "netProfit mismatch.",
+        );
+      }
+
+      if (
+        result.profitable !==
+        operation3SimulationResult.profitable
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "profitable mismatch.",
+        );
+      }
+
+      // ==================================================
+      // Verify the plan itself remains paper-only
+      // ==================================================
+
+      if (
+        paperPlan.paperOnly !== true
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Paper plan is not marked paperOnly.",
+        );
+      }
+
+      if (
+        paperPlan.state !==
+        "PAPER_ACCEPTED"
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Paper plan state mismatch.",
+        );
+      }
+
+      if (
+        paperPlan.triggerTransactionHash.toLowerCase() !==
+        triggerTransactionHash.toLowerCase()
+      ) {
+        throw new Error(
+          "[OPERATION 3 PAPER PLAN TEST] " +
+            "Paper plan trigger hash mismatch.",
+        );
+      }
+
+      console.log(
+        "[OPERATION 3 PAPER PLAN TEST] " +
+          "Operation 3 simulation result propagated " +
+          "through PaperExecutionService.",
+      );
+
+      console.log(
+        "[OPERATION 3 PAPER PLAN TEST] " +
+          "ALL EXECUTION DATA: PASSED",
+      );
+
+      console.log(
+        "[OPERATION 3 PAPER PLAN TEST] " +
+          "PASSED",
+      );
+
+      console.log("========================================");
+    } finally {
+      // ==================================================
+      // Restore clean paper execution state
+      // ==================================================
+
+      paperExecutionStore.clear();
     }
-
-    if (
-      paperPlan.operation3SimulationResult ===
-      undefined
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] Simulation result missing from paper plan.',
-      )
-    }
-
-    const result =
-      paperPlan.operation3SimulationResult
-
-    if (!result.success) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] Expected successful Operation 3 simulation result.',
-      )
-    }
-
-    if (
-      result.executionData?.dex1 !==
-      operation3ExecutionData.dex1
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] dex1 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.dex2 !==
-      operation3ExecutionData.dex2
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] dex2 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.tokenIn.toLowerCase() !==
-      operation3ExecutionData.tokenIn.toLowerCase()
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] tokenIn mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.tokenOut.toLowerCase() !==
-      operation3ExecutionData.tokenOut.toLowerCase()
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] tokenOut mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.uniFee1 !==
-      operation3ExecutionData.uniFee1
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] uniFee1 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.uniFee2 !==
-      operation3ExecutionData.uniFee2
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] uniFee2 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.minOut1 !==
-      operation3ExecutionData.minOut1
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] minOut1 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.minOut2 !==
-      operation3ExecutionData.minOut2
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] minOut2 mismatch.',
-      )
-    }
-
-    if (
-      result.executionData?.minProfit !==
-      operation3ExecutionData.minProfit
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] minProfit mismatch.',
-      )
-    }
-
-    if (
-      result.expectedProfit !==
-      operation3SimulationResult.expectedProfit
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] expectedProfit mismatch.',
-      )
-    }
-
-    if (
-      result.gasCost !==
-      operation3SimulationResult.gasCost
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] gasCost mismatch.',
-      )
-    }
-
-    if (
-      result.netProfit !==
-      operation3SimulationResult.netProfit
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] netProfit mismatch.',
-      )
-    }
-
-    if (
-      result.profitable !==
-      operation3SimulationResult.profitable
-    ) {
-      throw new Error(
-        '[OPERATION 3 PAPER PLAN TEST] profitable mismatch.',
-      )
-    }
-
-    console.log(
-      '[OPERATION 3 PAPER PLAN TEST] EXECUTION DATA: PASSED',
-    )
-
-    console.log(
-      '[OPERATION 3 PAPER PLAN TEST] PROFIT DATA: PASSED',
-    )
-
-    console.log(
-      '[OPERATION 3 PAPER PLAN TEST] PASSED',
-    )
-  }
+  };
 
   // ======================================================
   // STAGE 2.26.14F — OPERATION 3 STORE PROPAGATION TEST

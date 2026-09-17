@@ -1,6 +1,7 @@
 import type {
   BackrunCandidate,
   BackrunSimulationResult,
+  Operation3SimulationResult,
   PaperExecutionPlan,
   PaperExecutionResult,
 } from "../../types/mev";
@@ -43,6 +44,7 @@ export class PaperExecutionService {
   createPlan(
       candidate: BackrunCandidate,
       simulation: BackrunSimulationResult,
+      operation3SimulationResult?: Operation3SimulationResult,
     ): PaperExecutionResult {
       try {
         if (!candidate.triggerTransactionHash) {
@@ -173,63 +175,66 @@ export class PaperExecutionService {
           `PAPER-${Date.now()}-${candidate.blockNumber}`;
 
         const plan: PaperExecutionPlan = {
-              paperExecutionId,
+          paperExecutionId,
 
-              triggerTransactionHash:
-                candidate.triggerTransactionHash,
+          triggerTransactionHash:
+            candidate.triggerTransactionHash,
 
-              // Backrun execution data
-              backrunDex:
-                simulation.backrunDex!,
+          // Backrun execution data
+          backrunDex:
+            simulation.backrunDex!,
 
-              backrunTokenIn:
-                simulation.backrunTokenIn!,
+          backrunTokenIn:
+            simulation.backrunTokenIn!,
 
-              backrunTokenOut:
-                simulation.backrunTokenOut!,
+          backrunTokenOut:
+            simulation.backrunTokenOut!,
 
-              backrunAmountIn:
-                simulation.backrunAmountIn!,
+          backrunAmountIn:
+            simulation.backrunAmountIn!,
 
-              backrunExpectedAmountOut:
-                simulation.backrunExpectedAmountOut!,
+          backrunExpectedAmountOut:
+            simulation.backrunExpectedAmountOut!,
 
-              blockNumber:
-                candidate.blockNumber,
+          blockNumber:
+            candidate.blockNumber,
 
-              tokenIn:
-                candidate.tokenIn,
+          // Operation 3 simulation result
+          operation3SimulationResult,
 
-              tokenOut:
-                candidate.tokenOut,
+          tokenIn:
+            candidate.tokenIn,
 
-              amountIn:
-                candidate.amountIn,
+          tokenOut:
+            candidate.tokenOut,
 
-              expectedAmountOut:
-                candidate.expectedAmountOut,
+          amountIn:
+            candidate.amountIn,
 
-              expectedProfit:
-                simulation.expectedProfit,
+          expectedAmountOut:
+            candidate.expectedAmountOut,
 
-              gasCost:
-                simulation.gasCost,
+          expectedProfit:
+            simulation.expectedProfit,
 
-              netProfit:
-                simulation.netProfit,
+          gasCost:
+            simulation.gasCost,
 
-              profitable:
-                simulation.profitable,
+          netProfit:
+            simulation.netProfit,
 
-              createdAt:
-                Date.now(),
+          profitable:
+            simulation.profitable,
 
-              paperOnly:
-                true,
+          createdAt:
+            Date.now(),
 
-              state:
-                "PAPER_ACCEPTED",
-            };
+          paperOnly:
+            true,
+
+          state:
+            "PAPER_ACCEPTED",
+        };
 
         // ==================================================
         // Store successful paper execution
